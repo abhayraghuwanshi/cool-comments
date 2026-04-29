@@ -15,139 +15,184 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 })
 
 async function scrapeReel(): Promise<{ reel: ReelData; comments: RawComment[] }> {
-  // Expand all visible "View all X replies" buttons before scraping
-  await expandAllReplies()
-
   const reel = await scrapeReelInfo()
   const comments = scrapeComments(60)
   return { reel, comments }
 }
 
-// Click every "View all X replies" button and wait for replies to load
-async function expandAllReplies(): Promise<void> {
-  const replyButtons = document.querySelectorAll<HTMLElement>("div.x11hdunq")
-  if (replyButtons.length === 0) return
-
-  for (const btn of replyButtons) {
-    try {
-      btn.click()
-    } catch {
-      // ignore individual click failures
-    }
-  }
-
-  // Wait for replies to render
-  await delay(1200)
-}
+// ---------------------------------------------------------------------------
+// Reel info
+// ---------------------------------------------------------------------------
 
 async function scrapeReelInfo(): Promise<ReelData> {
-  // Username from the first profile link in the header/author area
-  // Instagram uses `_a6hd` on profile links; the author link is near the top
   const authorLink = document.querySelector<HTMLAnchorElement>(
     "a._a6hd[href^='/'][tabindex='0']:not([href*='/p/'])"
   )
   const username = extractUsername(authorLink?.href ?? "") || ""
 
-  // Profile pic — first img inside the header author area
   const profilePicEl =
     document.querySelector<HTMLImageElement>("article header img") ||
     document.querySelector<HTMLImageElement>("header img[crossorigin='anonymous']") ||
     null
-
   const profilePicUrl = profilePicEl ? await imageToBase64(profilePicEl.src) : ""
 
-  // Caption: the reel owner's own text — appears in the first ._ac6x block
-  // In the DOM, the poster's caption shares the same structure but is the first comment-like block
-  // It's also found in article section or in the first text block near the author
   const captionEl = document.querySelector<HTMLElement>(
-    "article span._ap3a._aacu, h1[dir='auto'], span[dir='auto'] > div[style*='inline'] span._ap3a._aacu"
+    "article span._ap3a._aacu, h1[dir='auto']"
   )
   const caption = captionEl?.textContent?.trim() ?? ""
 
-  // Like count from a "liked_by" link near the post (not comments)
-  const likesLinkEls = document.querySelectorAll<HTMLAnchorElement>("a[href*='/liked_by/']")
-  let likesCount = ""
-  if (likesLinkEls.length > 0) {
-    const span = likesLinkEls[0].querySelector("span")
-    likesCount = span?.textContent?.trim() ?? ""
-  }
+  const likesLinkEl = document.querySelector<HTMLAnchorElement>("a[href*='/liked_by/']")
+  const likesCount = likesLinkEl?.querySelector("span")?.textContent?.trim() ?? ""
 
-  return {
-    username,
-    profilePicUrl,
-    caption,
-    reelUrl: location.href,
-    likesCount,
-    commentsCount: "",
-  }
+  return { username, profilePicUrl, caption, reelUrl: location.href, likesCount, commentsCount: "" }
 }
 
+// ---------------------------------------------------------------------------
+// Comments
+// ---------------------------------------------------------------------------
+
 function scrapeComments(limit: number): RawComment[] {
-  // All comment/reply blocks use the stable `_ac6x` class
-  const commentBlocks = document.querySelectorAll<HTMLElement>("div._ac6x")
   const results: RawComment[] = []
+  const seen = new Set<string>()
 
-  for (let i = 0; i < commentBlocks.length && results.length < limit; i++) {
-    const block = commentBlocks[i]
+  const usernameSpans = document.querySelectorAll<HTMLElement>("span._ap3a._aacw, span._aacw")
 
-    const extracted = extractComment(block, i)
-    if (extracted) results.push(extracted)
+  for (const usernameSpan of usernameSpans) {
+    if (results.length >= limit) break
+
+    const username = usernameSpan.textContent?.trim() ?? ""
+    if (!username) continue
+
+    const root = findCommentRoot(usernameSpan)
+    if (!root) continue
+
+    const permalinkEl = root.querySelector<HTMLAnchorElement>("a[href*='/c/']")
+    const igId = permalinkEl?.href.match(/\/c\/(\d+)/)?.[1]
+    const dedupKey = igId ?? `${username}-${results.length}`
+    if (seen.has(dedupKey)) continue
+    seen.add(dedupKey)
+
+    const text = extractText(root, username)
+    if (!text || text === username) continue
+
+    const likesCount = extractLikes(root)
+    const isReply = text.startsWith("@") || !!root.querySelector("span._aacu a._a6hd")
+
+    results.push({
+      id: igId ?? `${username}-${results.length}`,
+      username,
+      text,
+      likesCount,
+      isReply,
+    } as RawComment & { isReply: boolean })
   }
 
   return results
 }
 
-function extractComment(block: HTMLElement, index: number): RawComment | null {
-  // Username: inside `a._a6hd` > `span._ap3a._aacw` — `_aacw` is the username variant
-  const usernameSpan = block.querySelector<HTMLElement>(
-    "a._a6hd span._ap3a._aacw, a._a6hd span._aacw"
-  )
-  const username = usernameSpan?.textContent?.trim() ?? ""
-  if (!username) return null
+/**
+ * Walk up from a username span until we find a container that has:
+ * 1. Exactly one _aacw span (we're inside a single comment)
+ * 2. A <time datetime> element (every comment has a timestamp)
+ * 3. Actual comment text (ensures we're above the sibling text div in new format)
+ *
+ * The bug this fixes: in the new Instagram DOM, the comment text is a SIBLING div
+ * to the username+time div. The old logic stopped at the username+time div which
+ * didn't contain the text. Now we keep going until we find a root that has all three.
+ */
+function findCommentRoot(el: HTMLElement): HTMLElement | null {
+  let cur: HTMLElement | null = el.parentElement
+  for (let i = 0; i < 18 && cur; i++) {
+    const uCount = cur.querySelectorAll("span._aacw, span._ap3a._aacw").length
+    // Bail if we've moved into a container with multiple comments
+    if (uCount > 1) break
 
-  // Comment text: `span._ap3a._aacu` — `_aacu` is the body text variant
-  // There can be multiple _aacu spans (whitespace, @mentions prefix, text).
-  // The actual content is in the last non-empty _aacu span that contains text.
-  const textSpans = block.querySelectorAll<HTMLElement>("span._ap3a._aacu, span._aacu")
-  let text = ""
-  for (const span of textSpans) {
-    const content = span.textContent?.trim() ?? ""
-    // Skip whitespace-only spans and spans that are just the username mention
-    if (content && content !== " " && content !== username) {
-      text = content
-      // Don't break — keep iterating so we get the last (deepest) text
+    if (uCount === 1 && cur.querySelector("time[datetime]") && hasCommentText(cur)) {
+      return cur
     }
+    cur = cur.parentElement
   }
-
-  // If no _aacu text found, try the inline div pattern:
-  // <div style="display: inline;"><span class="...">actual text</span></div>
-  if (!text) {
-    const inlineDivSpan = block.querySelector<HTMLElement>(
-      "div[style*='display: inline'] span._ap3a"
-    )
-    text = inlineDivSpan?.textContent?.trim() ?? ""
-  }
-
-  if (!text || text === username) return null
-
-  // Like count: from the linked "liked_by" anchor within this block
-  const likesLink = block.querySelector<HTMLAnchorElement>("a[href*='/liked_by/']")
-  const likesText = likesLink?.querySelector("span")?.textContent?.trim() ?? ""
-  // Normalize: "4,016 likes" → "4,016" or "4016"
-  const likesCount = likesText.replace(/\s*likes?\s*/i, "").trim()
-
-  // Detect if this is a reply: replies typically have "@username" prefix text
-  // We keep them since they can also be funny
-  const isReply = !!block.querySelector<HTMLElement>("span._aacu a._a6hd")
-
-  return {
-    id: `${username}-${index}`,
-    username,
-    text,
-    likesCount,
-    isReply,
-  } as RawComment & { isReply: boolean }
+  return null
 }
+
+/**
+ * Check if an element contains actual comment body text.
+ * Handles both DOM formats:
+ * - New: span[dir="auto"][style*="18px"] not inside <a>, not containing _aacw or <time>
+ * - Old: span._aacu with non-trivial content
+ */
+function hasCommentText(el: HTMLElement): boolean {
+  // New format
+  for (const span of el.querySelectorAll<HTMLElement>("span[dir='auto']")) {
+    if (span.closest("a")) continue
+    if (span.querySelector("span._aacw, time")) continue
+    const style = span.getAttribute("style") ?? ""
+    if (!style.includes("18px")) continue
+    const content = span.textContent?.trim() ?? ""
+    if (content && content.length > 1) return true
+  }
+
+  // Old format
+  for (const span of el.querySelectorAll<HTMLElement>("span._aacu, span._ap3a._aacu")) {
+    const content = span.textContent?.trim() ?? ""
+    if (content && content.length > 1) return true
+  }
+
+  return false
+}
+
+/**
+ * Extract comment body text — handles both DOM formats.
+ * Old: span._aacu   New: span[dir="auto"][style*="18px"] not inside <a>
+ */
+function extractText(root: HTMLElement, username: string): string {
+  // Old format: _aacu spans
+  const aacuSpans = root.querySelectorAll<HTMLElement>("span._ap3a._aacu, span._aacu")
+  if (aacuSpans.length > 0) {
+    let text = ""
+    for (const span of aacuSpans) {
+      const content = span.textContent?.trim() ?? ""
+      if (content && content !== " " && content !== username) text = content
+    }
+    if (text) return text
+  }
+
+  // New format: span[dir="auto"] with 18px line-height, not inside <a>
+  for (const span of root.querySelectorAll<HTMLElement>("span[dir='auto']")) {
+    if (span.closest("a")) continue
+    if (span.querySelector("span._aacw, time")) continue
+    const style = span.getAttribute("style") ?? ""
+    if (!style.includes("18px")) continue
+    const content = span.textContent?.trim() ?? ""
+    if (content && content !== username && content.length > 1) return content
+  }
+
+  return ""
+}
+
+/**
+ * Extract like count — handles both DOM formats.
+ * Old: a[href*="/liked_by/"] span   New: [role="button"] span text "X likes"
+ */
+function extractLikes(root: HTMLElement): string {
+  const likedByLink = root.querySelector<HTMLAnchorElement>("a[href*='/liked_by/']")
+  if (likedByLink) {
+    const raw = likedByLink.querySelector("span")?.textContent?.trim() ?? ""
+    return raw.replace(/\s*likes?\s*/i, "").trim()
+  }
+
+  for (const btn of root.querySelectorAll<HTMLElement>("[role='button']")) {
+    const t = btn.textContent?.trim() ?? ""
+    const m = t.match(/^([\d,]+)\s+likes?$/i)
+    if (m) return m[1]
+  }
+
+  return ""
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
 
 function extractUsername(href: string): string {
   const match = href.match(/instagram\.com\/([^/?#]+)/)
@@ -167,8 +212,4 @@ async function imageToBase64(url: string): Promise<string> {
   } catch {
     return ""
   }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }

@@ -9,6 +9,7 @@ interface Props {
   onToggleSettings: () => void
   onScrape: () => void
   onGoHome: () => void
+  onDelete: () => void
 }
 
 const MODES: { mode: RankingMode; label: string }[] = [
@@ -19,7 +20,7 @@ const MODES: { mode: RankingMode; label: string }[] = [
 
 export function ActionBar({
   rankingMode, onModeChange, onRerank, onAddComment,
-  onToggleSettings, onScrape, onGoHome,
+  onToggleSettings, onScrape, onGoHome, onDelete,
 }: Props) {
   return (
     <div className="flex items-center gap-1 px-2 py-2 border-b border-[#222] bg-[#141414] flex-wrap">
@@ -67,6 +68,15 @@ export function ActionBar({
           {icon} {label}
         </button>
       ))}
+
+      {/* Delete session */}
+      <button
+        onClick={onDelete}
+        title="Delete this session"
+        className="font-ui text-[13px] px-2 py-1 text-[#444] hover:text-red-400 hover:bg-red-950/30 rounded transition-all"
+      >
+        🗑
+      </button>
 
       {/* Settings — pushed to right */}
       <button

@@ -79,6 +79,10 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
     return { type: "ERROR", error: "NO_API_KEY" }
   }
 
+  if (!payload.comments || payload.comments.length === 0) {
+    return { type: "ERROR", error: "NO_COMMENTS_SCRAPED" }
+  }
+
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })

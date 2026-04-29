@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import type { ReelData, RankedComment, RankingMode } from "../shared/messages"
 import { useScraper } from "./hooks/useScraper"
 import { useRanker } from "./hooks/useRanker"
-import { saveSession, loadLastSession, type SavedSession } from "./lib/db"
+import { saveSession, loadLastSession, deleteSession, type SavedSession } from "./lib/db"
 import { ReelInfoPanel } from "./components/ReelInfoPanel"
 import { TierBoard } from "./components/TierBoard"
 import { ActionBar } from "./components/ActionBar"
@@ -71,6 +71,13 @@ export default function App() {
     }
 
     setReelData(scrapeResult.reel)
+
+    if (scrapeResult.comments.length === 0) {
+      setPhase("error")
+      setErrorMsg("No comments found. Scroll down on the reel to load comments, then scan again.")
+      return
+    }
+
     setPhase("ranking")
 
     const rankResult = await rank(scrapeResult.reel, scrapeResult.comments, rankingMode)
@@ -78,6 +85,8 @@ export default function App() {
       if (rankResult.error === "NO_API_KEY") {
         setShowSettings(true)
         setErrorMsg("Please enter your Gemini API key in settings.")
+      } else if (rankResult.error === "NO_COMMENTS_SCRAPED") {
+        setErrorMsg("No comments found. Scroll down on the reel to load comments, then scan again.")
       } else {
         setErrorMsg(rankResult.error)
       }
@@ -195,6 +204,12 @@ export default function App() {
         onToggleSettings={() => setShowSettings((s) => !s)}
         onScrape={handleScrapeAndRank}
         onGoHome={() => setPhase("idle")}
+        onDelete={async () => {
+          if (reelData) await deleteSession(reelData.reelUrl).catch(console.error)
+          setReelData(null)
+          setComments([])
+          setPhase("idle")
+        }}
       />
 
       {/* Error bar */}
