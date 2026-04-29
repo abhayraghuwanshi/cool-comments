@@ -3,6 +3,7 @@ import type { ReelData, RankedComment, RankingMode } from "../shared/messages"
 import { useScraper } from "./hooks/useScraper"
 import { useRanker } from "./hooks/useRanker"
 import { saveSession, loadLastSession, deleteSession, type SavedSession } from "./lib/db"
+import { exportTierBoard } from "./lib/export"
 import { ReelInfoPanel } from "./components/ReelInfoPanel"
 import { TierBoard } from "./components/TierBoard"
 import { ActionBar } from "./components/ActionBar"
@@ -203,6 +204,7 @@ export default function App() {
         onAddComment={() => setShowAddModal(true)}
         onToggleSettings={() => setShowSettings((s) => !s)}
         onScrape={handleScrapeAndRank}
+        onExport={() => exportTierBoard("tier-board-export-root", comments)}
         onGoHome={() => setPhase("idle")}
         onDelete={async () => {
           if (reelData) await deleteSession(reelData.reelUrl).catch(console.error)

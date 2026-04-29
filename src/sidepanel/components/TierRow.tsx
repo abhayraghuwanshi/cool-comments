@@ -32,11 +32,11 @@ export function TierRow({ tier, comments, globalOffset, onLock, onDelete }: Prop
       {/* Tier header */}
       <div className="flex items-center gap-3 px-3 pt-2.5 pb-1">
         <span
-          className="font-display leading-none select-none"
+          className="leading-none select-none"
           style={{
             fontSize: 48,
+            fontFamily: '"Bebas Neue", Impact, "Arial Narrow", Arial, sans-serif',
             color,
-            textShadow: `0 0 20px ${color}50`,
             lineHeight: 1,
           }}
         >
