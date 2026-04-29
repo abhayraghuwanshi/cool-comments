@@ -81,7 +81,7 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview!" })
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })
     const prompt = buildPrompt(payload.reel, payload.comments, payload.mode)
     const result = await model.generateContent(prompt)
     const text = result.response.text()

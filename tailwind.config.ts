@@ -4,14 +4,19 @@ export default {
   content: ["./src/**/*.{ts,tsx,html}"],
   theme: {
     extend: {
+      fontFamily: {
+        display: ['"Bebas Neue"', 'cursive'],
+        mono:    ['"IBM Plex Mono"', 'monospace'],
+        ui:      ['"Barlow Condensed"', 'sans-serif'],
+      },
       colors: {
         tier: {
-          S: "#ff7f00",
-          A: "#00c853",
-          B: "#2979ff",
-          C: "#aa00ff",
-          D: "#ff6d00",
-          F: "#d50000",
+          S: '#FF6B35',
+          A: '#39FF14',
+          B: '#00B4FF',
+          C: '#CC44FF',
+          D: '#FFB300',
+          F: '#FF1744',
         },
       },
     },

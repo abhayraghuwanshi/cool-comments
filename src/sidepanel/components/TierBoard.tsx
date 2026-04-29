@@ -1,13 +1,8 @@
 import { useState } from "react"
 import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
+  DndContext, DragOverlay, closestCenter,
+  PointerSensor, useSensor, useSensors,
+  type DragStartEvent, type DragEndEvent,
 } from "@dnd-kit/core"
 import { arrayMove } from "@dnd-kit/sortable"
 import type { RankedComment, Tier } from "../../shared/messages"
@@ -15,6 +10,11 @@ import { TierRow } from "./TierRow"
 import { CommentCard } from "./CommentCard"
 
 const TIERS: Tier[] = ["S", "A", "B", "C", "D", "F"]
+
+const TIER_COLOR: Record<Tier, string> = {
+  S: '#FF6B35', A: '#39FF14', B: '#00B4FF',
+  C: '#CC44FF', D: '#FFB300', F: '#FF1744',
+}
 
 interface Props {
   comments: RankedComment[]
@@ -37,12 +37,10 @@ export function TierBoard({ comments, onCommentsChange }: Props) {
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     setActiveId(null)
-
     if (!over) return
 
     const draggedId = active.id as string
     const overId = over.id as string
-
     const isTierLabel = (TIERS as string[]).includes(overId)
     const dragged = comments.find((c) => c.id === draggedId)
     if (!dragged || dragged.locked) return
@@ -64,23 +62,30 @@ export function TierBoard({ comments, onCommentsChange }: Props) {
         const oldIndex = tierComments.findIndex((c) => c.id === draggedId)
         const newIndex = tierComments.findIndex((c) => c.id === overId)
         if (oldIndex === newIndex) return
-
         const reordered = arrayMove(tierComments, oldIndex, newIndex)
-        const otherComments = comments.filter((c) => c.tier !== dragged.tier)
-        const tierOrder = TIERS.indexOf(dragged.tier)
-        const before = otherComments.filter((c) => TIERS.indexOf(c.tier) < tierOrder)
-        const after = otherComments.filter((c) => TIERS.indexOf(c.tier) >= tierOrder)
-        onCommentsChange([...before, ...reordered, ...after])
+        const others = comments.filter((c) => c.tier !== dragged.tier)
+        const tierIdx = TIERS.indexOf(dragged.tier)
+        onCommentsChange([
+          ...others.filter((c) => TIERS.indexOf(c.tier) < tierIdx),
+          ...reordered,
+          ...others.filter((c) => TIERS.indexOf(c.tier) >= tierIdx),
+        ])
       }
     }
   }
 
-  const handleLock = (id: string) => {
+  const handleLock = (id: string) =>
     onCommentsChange(comments.map((c) => (c.id === id ? { ...c, locked: !c.locked } : c)))
-  }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string) =>
     onCommentsChange(comments.filter((c) => c.id !== id))
+
+  // Global offsets for stagger animation
+  let offset = 0
+  const tierOffsets: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0, F: 0 }
+  for (const tier of TIERS) {
+    tierOffsets[tier] = offset
+    offset += comments.filter((c) => c.tier === tier).length
   }
 
   return (
@@ -90,21 +95,29 @@ export function TierBoard({ comments, onCommentsChange }: Props) {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col gap-0.5 p-2">
+      <div className="flex flex-col pb-6">
         {TIERS.map((tier) => (
           <TierRow
             key={tier}
             tier={tier}
             comments={comments.filter((c) => c.tier === tier)}
+            globalOffset={tierOffsets[tier]}
             onLock={handleLock}
             onDelete={handleDelete}
           />
         ))}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeComment ? (
-          <CommentCard comment={activeComment} isDragging onLock={() => {}} onDelete={() => {}} />
+          <CommentCard
+            comment={activeComment}
+            tierColor={TIER_COLOR[activeComment.tier]}
+            index={0}
+            isDragging
+            onLock={() => {}}
+            onDelete={() => {}}
+          />
         ) : null}
       </DragOverlay>
     </DndContext>

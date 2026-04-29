@@ -3,48 +3,82 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import type { RankedComment, Tier } from "../../shared/messages"
 import { CommentCard } from "./CommentCard"
 
-const TIER_COLORS: Record<Tier, string> = {
-  S: "bg-[#ff7f00]",
-  A: "bg-[#00c853]",
-  B: "bg-[#2979ff]",
-  C: "bg-[#aa00ff]",
-  D: "bg-[#ff6d00]",
-  F: "bg-[#d50000]",
+const TIER_COLOR: Record<Tier, string> = {
+  S: '#FF6B35',
+  A: '#39FF14',
+  B: '#00B4FF',
+  C: '#CC44FF',
+  D: '#FFB300',
+  F: '#FF1744',
 }
 
 interface Props {
   tier: Tier
   comments: RankedComment[]
+  globalOffset: number
   onLock: (id: string) => void
   onDelete: (id: string) => void
 }
 
-export function TierRow({ tier, comments, onLock, onDelete }: Props) {
+export function TierRow({ tier, comments, globalOffset, onLock, onDelete }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: tier })
+  const color = TIER_COLOR[tier]
 
   return (
     <div
-      ref={setNodeRef}
-      className={`flex gap-0 min-h-[52px] rounded transition-colors ${isOver ? "bg-[#1e1e1e]" : "bg-[#141414]"}`}
+      className="border-b border-[#1a1a1a] transition-colors duration-150"
+      style={{ background: isOver ? `${color}08` : 'transparent' }}
     >
-      <div
-        className={`w-10 shrink-0 flex items-center justify-center font-black text-lg text-white rounded-l ${TIER_COLORS[tier]}`}
-      >
-        {tier}
+      {/* Tier header */}
+      <div className="flex items-center gap-3 px-3 pt-2.5 pb-1">
+        <span
+          className="font-display leading-none select-none"
+          style={{
+            fontSize: 48,
+            color,
+            textShadow: `0 0 20px ${color}50`,
+            lineHeight: 1,
+          }}
+        >
+          {tier}
+        </span>
+        <div className="flex-1 flex items-center gap-2 overflow-hidden">
+          <div
+            className="flex-1 h-px"
+            style={{ background: `linear-gradient(to right, ${color}60, transparent)` }}
+          />
+          <span className="font-mono text-[10px] text-[#555] shrink-0 tabular-nums">
+            {comments.length > 0 ? comments.length : '—'}
+          </span>
+        </div>
       </div>
 
-      <SortableContext items={comments.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 flex flex-col gap-1 p-1 min-h-[52px]">
-          {comments.map((comment) => (
+      {/* Comments */}
+      <div ref={setNodeRef} className="px-3 pb-2.5 flex flex-col gap-1.5" style={{ minHeight: 36 }}>
+        <SortableContext items={comments.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          {comments.map((comment, i) => (
             <CommentCard
               key={comment.id}
               comment={comment}
+              tierColor={color}
+              index={globalOffset + i}
               onLock={onLock}
               onDelete={onDelete}
             />
           ))}
-        </div>
-      </SortableContext>
+        </SortableContext>
+
+        {comments.length === 0 && (
+          <div
+            className="flex items-center justify-center rounded-sm"
+            style={{ height: 28, border: `1px dashed ${color}30` }}
+          >
+            <span className="font-mono text-[9px] tracking-[0.2em] uppercase" style={{ color: `${color}50` }}>
+              drop here
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
