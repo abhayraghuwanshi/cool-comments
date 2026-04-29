@@ -5,13 +5,14 @@ import { useRanker } from "./hooks/useRanker"
 import { saveSession, loadLastSession, deleteSession, type SavedSession } from "./lib/db"
 import { exportTierBoard } from "./lib/export"
 import { ReelInfoPanel } from "./components/ReelInfoPanel"
+import { ContextPrompt } from "./components/ContextPrompt"
 import { TierBoard } from "./components/TierBoard"
 import { ActionBar } from "./components/ActionBar"
 import { LoadingState } from "./components/LoadingState"
 import { EmptyState } from "./components/EmptyState"
 import { AddCommentModal } from "./components/AddCommentModal"
 
-type Phase = "idle" | "scraping" | "ranking" | "ready" | "error"
+type Phase = "idle" | "scraping" | "awaiting-context" | "ranking" | "ready" | "error"
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>("idle")
@@ -23,6 +24,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [apiKey, setApiKey] = useState("")
   const [restoredFrom, setRestoredFrom] = useState<string | null>(null)
+  const [pendingScrape, setPendingScrape] = useState<{ reel: import("../shared/messages").ReelData; comments: import("../shared/messages").RawComment[] } | null>(null)
 
   const { scrape } = useScraper()
   const { rank } = useRanker()
@@ -79,9 +81,16 @@ export default function App() {
       return
     }
 
+    // Pause here — show the context prompt before ranking
+    setPendingScrape({ reel: scrapeResult.reel, comments: scrapeResult.comments })
+    setPhase("awaiting-context")
+  }, [scrape, rankingMode])
+
+  const handleContextSubmit = useCallback(async (reelContext: string) => {
+    if (!pendingScrape) return
     setPhase("ranking")
 
-    const rankResult = await rank(scrapeResult.reel, scrapeResult.comments, rankingMode)
+    const rankResult = await rank(pendingScrape.reel, pendingScrape.comments, rankingMode, reelContext || undefined)
     if ("error" in rankResult) {
       if (rankResult.error === "NO_API_KEY") {
         setShowSettings(true)
@@ -97,7 +106,7 @@ export default function App() {
 
     setComments(rankResult.comments)
     setPhase("ready")
-  }, [scrape, rank, rankingMode])
+  }, [pendingScrape, rank, rankingMode])
 
   const handleRerank = useCallback(async () => {
     if (!reelData) return
@@ -139,6 +148,12 @@ export default function App() {
 
   if (phase === "scraping") return <LoadingState message="reading the comments..." />
   if (phase === "ranking")  return <LoadingState message="the AI is judging..." />
+  if (phase === "awaiting-context") return (
+    <ContextPrompt
+      onSubmit={handleContextSubmit}
+      onSkip={() => handleContextSubmit("")}
+    />
+  )
 
   if (phase === "idle" || (phase === "error" && !reelData)) {
     return (

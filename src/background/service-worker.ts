@@ -86,7 +86,7 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })
-    const prompt = buildPrompt(payload.reel, payload.comments, payload.mode)
+    const prompt = buildPrompt(payload.reel, payload.comments, payload.mode, payload.reelContext)
     const result = await model.generateContent(prompt)
     const text = result.response.text()
     const ranked = parseRankingResponse(text, payload.comments)
@@ -96,18 +96,22 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
   }
 }
 
-function buildPrompt(reel: ReelData, comments: RawComment[], mode: RankingMode): string {
+function buildPrompt(reel: ReelData, comments: RawComment[], mode: RankingMode, reelContext?: string): string {
   const modeInstruction: Record<RankingMode, string> = {
     default: "Rank based on humor, wit, originality, and cleverness.",
     savage: "Rank harshly. Only truly devastating or brilliant comments get S or A. Be merciless with mediocrity.",
     indian: "Rank with extra points for desi humor, Bollywood references, Indian English quirks, chai references, and regional jokes that resonate with an Indian audience.",
   }
 
+  const contextLine = reelContext
+    ? `- What this reel is about: "${reelContext}"`
+    : `- Caption: "${reel.caption}"`
+
   return `You are a comment tier-list judge for Instagram reels.
 
 REEL CONTEXT:
 - Creator: @${reel.username}
-- Caption: "${reel.caption}"
+${contextLine}
 
 RANKING INSTRUCTIONS:
 ${modeInstruction[mode]}

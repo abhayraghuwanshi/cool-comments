@@ -5,10 +5,10 @@ type RankResult = { comments: RankedComment[] } | { error: string }
 
 export function useRanker() {
   const rank = useCallback(
-    async (reel: ReelData, comments: RawComment[], mode: RankingMode): Promise<RankResult> => {
+    async (reel: ReelData, comments: RawComment[], mode: RankingMode, reelContext?: string): Promise<RankResult> => {
       return new Promise((resolve) => {
         chrome.runtime.sendMessage(
-          { type: "RANK_COMMENTS", payload: { reel, comments, mode } },
+          { type: "RANK_COMMENTS", payload: { reel, comments, mode, reelContext } },
           (response) => {
             if (chrome.runtime.lastError) {
               resolve({ error: chrome.runtime.lastError.message ?? "Unknown error" })

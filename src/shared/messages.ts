@@ -39,6 +39,7 @@ export interface RankCommentsPayload {
   reel: ReelData
   comments: RawComment[]
   mode: RankingMode
+  reelContext?: string
 }
 
 export interface Message {
