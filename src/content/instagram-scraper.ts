@@ -25,22 +25,42 @@ async function scrapeReel(): Promise<{ reel: ReelData; comments: RawComment[] }>
 // ---------------------------------------------------------------------------
 
 async function scrapeReelInfo(): Promise<ReelData> {
-  const authorLink = document.querySelector<HTMLAnchorElement>(
-    "a._a6hd[href^='/'][tabindex='0']:not([href*='/p/'])"
-  )
-  const username = extractUsername(authorLink?.href ?? "") || ""
+  // The post header wraps the avatar in a div[aria-disabled="true"] button —
+  // this attribute is unique to the post header (Instagram disables the avatar
+  // button when viewing someone else's reel in the overlay).
+  // Fallback: span[role="link"] for own reels where aria-disabled may differ.
+  const headerPic =
+    document.querySelector<HTMLImageElement>(
+      '[aria-disabled="true"] img[alt*="\'s profile picture"]'
+    ) ||
+    document.querySelector<HTMLImageElement>(
+      'span[role="link"] img[alt*="\'s profile picture"]'
+    )
 
-  const profilePicEl =
-    document.querySelector<HTMLImageElement>("article header img") ||
-    document.querySelector<HTMLImageElement>("header img[crossorigin='anonymous']") ||
+  // Also try _aacw inside the disabled container as a username cross-check
+  const headerContainer = document.querySelector<HTMLElement>('[aria-disabled="true"]')
+  const usernameFromSpan = headerContainer
+    ?.querySelector<HTMLElement>("span._ap3a._aacw, span._aacw")
+    ?.textContent?.trim() ?? ""
+
+  const altText = headerPic?.getAttribute("alt") ?? ""
+  const usernameFromAlt = altText.replace(/'s profile picture$/i, "").trim()
+
+  const username = usernameFromAlt || usernameFromSpan
+
+  const profilePicUrl = headerPic ? await imageToBase64(headerPic.src) : ""
+
+  // Caption:
+  //   Old format → span._ap3a._aacu
+  //   New format → span.x126k92a (observed consistently in all new-format pages)
+  const captionEl =
+    document.querySelector<HTMLElement>("span._ap3a._aacu") ||
+    document.querySelector<HTMLElement>("span.x126k92a") ||
+    document.querySelector<HTMLElement>("h1[dir='auto']") ||
     null
-  const profilePicUrl = profilePicEl ? await imageToBase64(profilePicEl.src) : ""
-
-  const captionEl = document.querySelector<HTMLElement>(
-    "article span._ap3a._aacu, h1[dir='auto']"
-  )
   const caption = captionEl?.textContent?.trim() ?? ""
 
+  // Like count
   const likesLinkEl = document.querySelector<HTMLAnchorElement>("a[href*='/liked_by/']")
   const likesCount = likesLinkEl?.querySelector("span")?.textContent?.trim() ?? ""
 
@@ -74,6 +94,7 @@ function scrapeComments(limit: number): RawComment[] {
 
     const text = extractText(root, username)
     if (!text || text === username) continue
+    if (isSpam(text)) continue
 
     const likesCount = extractLikes(root)
     const isReply = text.startsWith("@") || !!root.querySelector("span._aacu a._a6hd")
@@ -188,6 +209,54 @@ function extractLikes(root: HTMLElement): string {
   }
 
   return ""
+}
+
+// ---------------------------------------------------------------------------
+// Spam filter
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip emojis, @mentions, #hashtags, and punctuation.
+ * Returns only real word characters.
+ */
+function stripToMeaningful(text: string): string {
+  return text
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, "") // supplementary emoji (🔥😂👏 etc)
+    .replace(/[\u{2600}-\u{27FF}]/gu, "")   // misc symbols (♥ ★ ☆ etc)
+    .replace(/[\u{FE00}-\u{FEFF}]/gu, "")   // variation selectors
+    .replace(/‍/g, "")                  // zero-width joiner
+    .replace(/⃣/g, "")                  // combining enclosing keycap
+    .replace(/@[\w.]+/g, "")                 // @mentions
+    .replace(/#\w+/g, "")                    // #hashtags
+    .replace(/[^\p{L}\p{N}\s]/gu, "")        // punctuation/symbols
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+/**
+ * Returns true for comments that are pure noise:
+ * - Emoji-only / @mention-only / symbol-only (< 5 real chars after stripping)
+ * - Repeated single token (👏👏👏 or "lol lol lol")
+ * - Known one-word fillers
+ */
+function isSpam(text: string): boolean {
+  const meaningful = stripToMeaningful(text)
+
+  // Less than 5 real characters after removing emoji + mentions = spam
+  if (meaningful.length < 5) return true
+
+  // Repeated token spam ("lol lol lol", "nice nice")
+  const tokens = meaningful.toLowerCase().split(" ").filter(Boolean)
+  if (tokens.length > 1 && new Set(tokens).size === 1) return true
+
+  // Single known filler word
+  const FILLERS = new Set([
+    "nice", "wow", "lol", "lmao", "haha", "hehe", "ok", "okay",
+    "yes", "no", "great", "amazing", "fire", "bro", "gg",
+  ])
+  if (tokens.length === 1 && FILLERS.has(tokens[0])) return true
+
+  return false
 }
 
 // ---------------------------------------------------------------------------
