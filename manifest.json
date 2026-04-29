@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Cool Comments",
+  "version": "0.1.0",
+  "description": "AI-powered tier list for Instagram reel comments",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Cool Comments"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["src/content/instagram-scraper.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["sidePanel", "activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ]
+}

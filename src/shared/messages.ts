@@ -1,0 +1,48 @@
+export type Tier = "S" | "A" | "B" | "C" | "D" | "F"
+export type RankingMode = "default" | "savage" | "indian"
+
+export interface ReelData {
+  username: string
+  profilePicUrl: string
+  caption: string
+  reelUrl: string
+  likesCount: string
+  commentsCount: string
+}
+
+export interface RawComment {
+  id: string
+  username: string
+  text: string
+  likesCount: string
+  isReply?: boolean
+}
+
+export interface RankedComment extends RawComment {
+  tier: Tier
+  locked: boolean
+}
+
+export type MessageType =
+  | "SCRAPE_REEL"
+  | "SCRAPE_RESULT"
+  | "RANK_COMMENTS"
+  | "RANK_RESULT"
+  | "ERROR"
+
+export interface ScrapeResultPayload {
+  reel: ReelData
+  comments: RawComment[]
+}
+
+export interface RankCommentsPayload {
+  reel: ReelData
+  comments: RawComment[]
+  mode: RankingMode
+}
+
+export interface Message {
+  type: MessageType
+  payload?: unknown
+  error?: string
+}

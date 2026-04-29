@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\Users\\\\raghu\\\\projects\\\\cool-comments\")",
+      "Bash(node -e \"console.log\\(process.version\\)\")",
+      "Bash(npm -v)",
+      "Bash(npm info *)",
+      "Bash(npm install *)"
+    ]
+  }
+}
