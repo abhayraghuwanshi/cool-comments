@@ -188,10 +188,8 @@ function drawTierScene(
   const color = TIER_COLOR[tier]
 
   ctx.clearRect(0, 0, W, H)
-  if (!overlay) {
-    ctx.fillStyle = "#080808"
-    ctx.fillRect(0, 0, W, H)
-  }
+  ctx.fillStyle = overlay ? GREEN_SCREEN : "#080808"
+  ctx.fillRect(0, 0, W, H)
 
   const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, W)
   glow.addColorStop(0, color + (overlay ? "30" : "1a"))
@@ -372,8 +370,9 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
   })
 }
 
-// Transparent overlay export — no background, VP8 alpha, no intro/outro.
-// Use in CapCut: import this .webm over your reel, enable alpha.
+const GREEN_SCREEN = "#00FF00"  // chroma key color — remove in CapCut with Chroma Key tool
+
+// Green-screen overlay export — use in CapCut: Overlay → Chroma Key → pick green → done.
 export async function exportOverlayVideo(comments: RankedComment[]): Promise<void> {
   await document.fonts.ready
 
@@ -385,12 +384,14 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
 
   const canvas = document.createElement("canvas")
   canvas.width = W; canvas.height = H
-  const ctx = canvas.getContext("2d", { alpha: true })!
+  const ctx = canvas.getContext("2d")!
 
-  // VP8 supports WebM alpha channel — required for transparency
-  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
-    ? "video/webm;codecs=vp8"
-    : "video/webm"
+  const mimeType =
+    MediaRecorder.isTypeSupported("video/mp4;codecs=avc1") ? "video/mp4;codecs=avc1" :
+    MediaRecorder.isTypeSupported("video/mp4")             ? "video/mp4"             :
+    MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" :
+                                                             "video/webm"
+  const ext = mimeType.startsWith("video/mp4") ? "mp4" : "webm"
 
   const recorder = new MediaRecorder(canvas.captureStream(FPS), {
     mimeType,
@@ -418,7 +419,7 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `cool-comments-overlay-${Date.now()}.webm`
+      a.download = `cool-comments-overlay-${Date.now()}.${ext}`
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 5000)
       resolve()
