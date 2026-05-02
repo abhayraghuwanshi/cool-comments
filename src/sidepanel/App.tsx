@@ -3,7 +3,7 @@ import type { ReelData, RankedComment, RankingMode } from "../shared/messages"
 import { useScraper } from "./hooks/useScraper"
 import { useRanker } from "./hooks/useRanker"
 import { saveSession, loadLastSession, deleteSession, type SavedSession } from "./lib/db"
-import { exportReelVideo } from "./lib/exportReel"
+import { exportReelVideo, exportOverlayVideo } from "./lib/exportReel"
 import { ReelInfoPanel } from "./components/ReelInfoPanel"
 import { ContextPrompt } from "./components/ContextPrompt"
 import { TierBoard } from "./components/TierBoard"
@@ -227,6 +227,12 @@ export default function App() {
           if (!reelData || isExporting) return
           setIsExporting(true)
           await exportReelVideo(reelData, comments).catch(console.error)
+          setIsExporting(false)
+        }}
+        onExportOverlay={async () => {
+          if (isExporting) return
+          setIsExporting(true)
+          await exportOverlayVideo(comments).catch(console.error)
           setIsExporting(false)
         }}
         onGoHome={() => setPhase("idle")}

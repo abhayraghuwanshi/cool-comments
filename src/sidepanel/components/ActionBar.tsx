@@ -10,6 +10,7 @@ interface Props {
   onGoHome: () => void
   onDelete: () => void
   onExport: () => void
+  onExportOverlay: () => void
   isExporting?: boolean
 }
 
@@ -21,7 +22,7 @@ const MODES: { mode: RankingMode; label: string }[] = [
 
 export function ActionBar({
   rankingMode, onModeChange, onRerank, onAddComment,
-  onToggleSettings, onScrape, onGoHome, onDelete, onExport, isExporting,
+  onToggleSettings, onScrape, onGoHome, onDelete, onExport, onExportOverlay, isExporting,
 }: Props) {
   return (
     <div className="flex items-center gap-1 px-2 py-2 border-b border-[#222] bg-[#141414] flex-wrap">
@@ -55,7 +56,7 @@ export function ActionBar({
       <button
         onClick={onExport}
         disabled={isExporting}
-        title="Export as Reel"
+        title="Export as Reel (standalone video)"
         className={`font-ui text-[12px] font-semibold px-2.5 py-1 rounded transition-all flex items-center gap-1.5 ${
           isExporting
             ? "text-[#FF6B35] bg-[#1a1a1a] cursor-wait"
@@ -68,6 +69,14 @@ export function ActionBar({
             rec
           </>
         ) : "▶ Reel"}
+      </button>
+      <button
+        onClick={onExportOverlay}
+        disabled={isExporting}
+        title="Export transparent overlay for Remix / CapCut"
+        className="font-ui text-[12px] font-semibold px-2.5 py-1 rounded transition-all text-[#777] hover:text-white hover:bg-[#252525] disabled:opacity-40"
+      >
+        ◈ Overlay
       </button>
 
       <button onClick={onDelete} title="Delete this session" className="font-ui text-[13px] px-2 py-1 text-[#444] hover:text-red-400 hover:bg-red-950/30 rounded transition-all">🗑</button>
