@@ -8,6 +8,7 @@ export interface ReelData {
   reelUrl: string
   likesCount: string
   commentsCount: string
+  thumbnailUrl?: string
 }
 
 export interface RawComment {

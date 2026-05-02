@@ -3,7 +3,7 @@ import type { ReelData, RankedComment, RankingMode } from "../shared/messages"
 import { useScraper } from "./hooks/useScraper"
 import { useRanker } from "./hooks/useRanker"
 import { saveSession, loadLastSession, deleteSession, type SavedSession } from "./lib/db"
-import { exportTierBoard } from "./lib/export"
+import { exportReelVideo } from "./lib/exportReel"
 import { ReelInfoPanel } from "./components/ReelInfoPanel"
 import { ContextPrompt } from "./components/ContextPrompt"
 import { TierBoard } from "./components/TierBoard"
@@ -22,6 +22,7 @@ export default function App() {
   const [rankingMode, setRankingMode] = useState<RankingMode>("default")
   const [showAddModal, setShowAddModal] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [apiKey, setApiKey] = useState("")
   const [restoredFrom, setRestoredFrom] = useState<string | null>(null)
   const [pendingScrape, setPendingScrape] = useState<{ reel: import("../shared/messages").ReelData; comments: import("../shared/messages").RawComment[] } | null>(null)
@@ -219,7 +220,13 @@ export default function App() {
         onAddComment={() => setShowAddModal(true)}
         onToggleSettings={() => setShowSettings((s) => !s)}
         onScrape={handleScrapeAndRank}
-        onExport={() => exportTierBoard("tier-board-export-root", comments)}
+        isExporting={isExporting}
+        onExport={async () => {
+          if (!reelData || isExporting) return
+          setIsExporting(true)
+          await exportReelVideo(reelData, comments).catch(console.error)
+          setIsExporting(false)
+        }}
         onGoHome={() => setPhase("idle")}
         onDelete={async () => {
           if (reelData) await deleteSession(reelData.reelUrl).catch(console.error)
