@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { listSessions, loadSession, deleteSession } from "../lib/db"
 import type { SavedSession } from "../lib/db"
+import type { RankingMode } from "../../shared/messages"
 
 interface Props {
   error?: string
@@ -10,11 +11,13 @@ interface Props {
   onSaveApiKey: () => void
   onScrape: () => void
   onRestoreSession: (session: SavedSession) => void
+  rankingMode: RankingMode
+  onModeChange: (mode: RankingMode) => void
 }
 
 export function EmptyState({
   error, showSettings, apiKey, onApiKeyChange,
-  onSaveApiKey, onScrape, onRestoreSession,
+  onSaveApiKey, onScrape, onRestoreSession, rankingMode, onModeChange,
 }: Props) {
   const [sessions, setSessions] = useState<Pick<SavedSession, "reelUrl" | "reelData" | "savedAt">[]>([])
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null)
@@ -120,15 +123,20 @@ export function EmptyState({
             Modes
           </p>
 
-          {[
-            { label: 'Normal',     color: '#ccc',     desc: 'Balanced' },
-            { label: '☠ Savage',  color: '#FF1744',   desc: 'Harsh verdicts' },
-            { label: '🇮🇳 Desi',   color: '#FF6B35',   desc: 'Desi humor' },
-          ].map(({ label, color, desc }) => (
-            <div key={label} className="flex flex-col mb-1">
-              <span className="font-ui text-[12px] font-bold leading-tight" style={{ color }}>{label}</span>
+          {([
+            { mode: 'default' as RankingMode, label: 'Normal',    color: '#ccc',    desc: 'Balanced' },
+            { mode: 'savage'  as RankingMode, label: '☠ Savage', color: '#FF1744', desc: 'Harsh verdicts' },
+            { mode: 'indian'  as RankingMode, label: '🇮🇳 Desi',  color: '#FF6B35', desc: 'Desi humor' },
+          ]).map(({ mode, label, color, desc }) => (
+            <button
+              key={mode}
+              onClick={() => onModeChange(mode)}
+              className="flex flex-col mb-1 text-left w-full px-1.5 py-1 rounded-sm transition-colors hover:bg-[#1a1a1a]"
+              style={{ outline: rankingMode === mode ? `1px solid ${color}30` : 'none', background: rankingMode === mode ? `${color}10` : undefined }}
+            >
+              <span className="font-ui text-[12px] font-bold leading-tight" style={{ color: rankingMode === mode ? color : '#666' }}>{label}</span>
               <span className="font-mono text-[9px] text-[#555]">{desc}</span>
-            </div>
+            </button>
           ))}
         </div>
 

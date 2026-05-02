@@ -97,40 +97,59 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
 }
 
 function buildPrompt(reel: ReelData, comments: RawComment[], mode: RankingMode, reelContext?: string): string {
-  const modeInstruction: Record<RankingMode, string> = {
-    default: "Rank based on humor, wit, originality, and cleverness.",
-    savage: "Rank harshly. Only truly devastating or brilliant comments get S or A. Be merciless with mediocrity.",
-    indian: "Rank with extra points for desi humor, Bollywood references, Indian English quirks, chai references, and regional jokes that resonate with an Indian audience.",
-  }
-
   const contextLine = reelContext
     ? `- What this reel is about: "${reelContext}"`
     : `- Caption: "${reel.caption}"`
+
+  const modeBlock: Record<RankingMode, string> = {
+    default: `
+TIER DEFINITIONS:
+S - Legendary. Stops your scroll. Instantly quotable or perfectly timed.
+A - Genuinely funny or clever. Clearly above average. Made you laugh out loud.
+B - Solid joke. Gets a chuckle. Nothing wrong but nothing special.
+C - Generic reaction. Low effort but inoffensive. Basic comment energy.
+D - Cringe, try-hard, unfunny, or painfully mid.
+F - Spam, off-topic, emoji-only, or painful to read.
+
+INSTRUCTIONS: Judge purely on humor, wit, and originality. Spread comments across all tiers — do not cluster everything in B/C.`,
+
+    savage: `
+TIER DEFINITIONS:
+S - Once-in-a-lifetime comment. Completely stops your scroll. Devastating wit or perfect callback.
+A - Legitimately clever or funny. Rare. Most people couldn't write this.
+B - Acceptable. Has a point. Still kind of mid though.
+C - Mediocre filler. Forgettable within 2 seconds.
+D - Cringe, try-hard, or just embarrassing to read.
+F - Basic, spam, generic reaction, or any comment a bot could write.
+
+INSTRUCTIONS: You are a brutal critic. The bar for S and A is extremely high — only 1-2 comments max should reach S. MOST comments in any reel section are D or F tier. Do NOT be generous. If a comment made you think "that's fine", it is a D. Generic compliments, basic reactions, and low-effort one-liners are all F.`,
+
+    indian: `
+TIER DEFINITIONS:
+S - Peak desi comment. Instantly relatable to any Indian. Possibly goes viral in Indian WhatsApp groups.
+A - Strong desi humor. Bollywood reference, Indian English gem, or regional joke that lands perfectly.
+B - Has some desi flavor. Decent humor even if not fully Indian-coded.
+C - Generic comment. No desi flavor. Could have been written by anyone anywhere.
+D - Cringe, try-hard, or imports Western humor that doesn't land for an Indian audience.
+F - Spam, emoji-only, or completely irrelevant.
+
+INSTRUCTIONS: You are judging from a pure desi internet perspective. BONUS TIER for: "bhai/yaar" energy, Bollywood puns, engineering/IIT/UPSC memes, mom-dad-"log kya kahenge" jokes, Indian English quirks ("doing the needful", "out of station", "prepone"), regional slips ("ek dum", "bindaas", "jugaad"), uncle-aunty observations. PENALISE comments that are generic English internet humor with zero desi flavor — those are C or D regardless of how funny they might seem globally.`,
+  }
 
   return `You are a comment tier-list judge for Instagram reels.
 
 REEL CONTEXT:
 - Creator: @${reel.username}
 ${contextLine}
-
-RANKING INSTRUCTIONS:
-${modeInstruction[mode]}
-
-TIER DEFINITIONS:
-S - Legendary. Instantly shareable. Perfect timing or devastating wit.
-A - Very funny or clever. Clearly above average.
-B - Solid. Gets a laugh but nothing special.
-C - Generic or mid. Standard comment energy.
-D - Boring, cringe, or try-hard.
-F - Spam, irrelevant, or painful to read.
+${modeBlock[mode]}
 
 COMMENTS TO RANK:
 ${JSON.stringify(comments.map((c) => ({ id: c.id, text: c.text, likes: c.likesCount, reply: c.isReply ?? false })))}
 
-Return ONLY a valid JSON array. No explanation. No markdown code fences. Format:
+Return ONLY a valid JSON array. No explanation. No markdown. Format:
 [{"id": "comment-id", "tier": "S"}, ...]
 
-Include all ${comments.length} comments. Every comment gets exactly one tier.`
+Include ALL ${comments.length} comments. Every comment gets exactly one tier (S/A/B/C/D/F uppercase).`
 }
 
 function parseRankingResponse(text: string, comments: RawComment[]): RankedComment[] {

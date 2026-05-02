@@ -49,6 +49,8 @@ async function scrapeReelInfo(): Promise<ReelData> {
   const username = usernameFromAlt || usernameFromSpan
 
   const profilePicUrl = headerPic ? await imageToBase64(headerPic.src) : ""
+  const video = document.querySelector<HTMLVideoElement>("video")
+  const thumbnailUrl = video ? videoFrameToBase64(video) : ""
 
   // Caption:
   //   Old format → span._ap3a._aacu
@@ -64,7 +66,7 @@ async function scrapeReelInfo(): Promise<ReelData> {
   const likesLinkEl = document.querySelector<HTMLAnchorElement>("a[href*='/liked_by/']")
   const likesCount = likesLinkEl?.querySelector("span")?.textContent?.trim() ?? ""
 
-  return { username, profilePicUrl, caption, reelUrl: location.href, likesCount, commentsCount: "" }
+  return { username, profilePicUrl, caption, thumbnailUrl, reelUrl: location.href, likesCount, commentsCount: "" }
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +268,19 @@ function isSpam(text: string): boolean {
 function extractUsername(href: string): string {
   const match = href.match(/instagram\.com\/([^/?#]+)/)
   return match ? match[1] : ""
+}
+
+function videoFrameToBase64(video: HTMLVideoElement): string {
+  try {
+    if (video.readyState < 2) return ""
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth || 720
+    canvas.height = video.videoHeight || 1280
+    canvas.getContext("2d")!.drawImage(video, 0, 0)
+    return canvas.toDataURL("image/jpeg", 0.85)
+  } catch {
+    return ""
+  }
 }
 
 async function imageToBase64(url: string): Promise<string> {
