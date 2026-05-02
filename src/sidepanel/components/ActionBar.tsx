@@ -56,13 +56,18 @@ export function ActionBar({
         onClick={onExport}
         disabled={isExporting}
         title="Export as Reel"
-        className={`font-ui text-[12px] font-semibold px-2.5 py-1 rounded transition-all ${
+        className={`font-ui text-[12px] font-semibold px-2.5 py-1 rounded transition-all flex items-center gap-1.5 ${
           isExporting
             ? "text-[#FF6B35] bg-[#1a1a1a] cursor-wait"
             : "text-[#777] hover:text-white hover:bg-[#252525]"
         }`}
       >
-        {isExporting ? "● rec" : "▶ Reel"}
+        {isExporting ? (
+          <>
+            <span className="inline-block w-3 h-3 rounded-full border-2 border-[#FF6B35]/25 border-t-[#FF6B35] animate-spin" />
+            rec
+          </>
+        ) : "▶ Reel"}
       </button>
 
       <button onClick={onDelete} title="Delete this session" className="font-ui text-[13px] px-2 py-1 text-[#444] hover:text-red-400 hover:bg-red-950/30 rounded transition-all">🗑</button>

@@ -266,7 +266,10 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
   await document.fonts.ready
 
   const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [] }
-  for (const c of comments) byTier[c.tier].push(c)
+  for (const c of comments) {
+    const tier = (c.tier?.toUpperCase() ?? "") as Tier
+    if (tier in byTier) byTier[tier].push(c)
+  }
 
   const [thumbImg, profImg] = await Promise.all([
     reelData.thumbnailUrl ? loadImg(reelData.thumbnailUrl) : Promise.resolve(null),
@@ -277,9 +280,12 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext("2d")!
 
-  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-    ? "video/webm;codecs=vp9"
-    : "video/webm"
+  const mimeType =
+    MediaRecorder.isTypeSupported("video/mp4;codecs=avc1") ? "video/mp4;codecs=avc1" :
+    MediaRecorder.isTypeSupported("video/mp4")             ? "video/mp4"             :
+    MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" :
+                                                             "video/webm"
+  const ext = mimeType.startsWith("video/mp4") ? "mp4" : "webm"
   const recorder = new MediaRecorder(canvas.captureStream(FPS), {
     mimeType,
     videoBitsPerSecond: 8_000_000,
@@ -304,35 +310,27 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
 
   await new Promise<void>((resolve) => {
     recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" })
+      const blob = new Blob(chunks, { type: mimeType })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `cool-comments-${Date.now()}.webm`
+      a.download = `cool-comments-${Date.now()}.${ext}`
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 5000)
       resolve()
     }
 
-    recorder.start()
-    let startTs: number | null = null
+    recorder.start(200)
+    const startTime = Date.now()
 
-    function frame(ts: number) {
-      if (!startTs) startTs = ts
-      const t = (ts - startTs) / 1000
-
-      if (t >= totalDur) {
-        drawOutro(ctx, 1)
-        recorder.stop()
-        return
-      }
+    function drawFrame() {
+      const t = (Date.now() - startTime) / 1000
 
       if (t < INTRO_DUR) {
         drawIntro(ctx, reelData, thumbImg, profImg, t / INTRO_DUR)
       } else if (t >= outroStart) {
         drawOutro(ctx, (t - outroStart) / OUTRO_DUR)
       } else {
-        // find active tier
         let ti = TIERS_ORDER.length - 1
         for (let i = 0; i < TIERS_ORDER.length - 1; i++) {
           if (t < tierStarts[i + 1]) { ti = i; break }
@@ -353,13 +351,19 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
             ? Math.min((ce - ci * COMMENT_DUR) / SLIDE_DUR, 1)
             : 0
         }
-
         drawTierScene(ctx, tier, tierComments, labelProgress, visibleCount, currentSlide)
       }
-
-      requestAnimationFrame(frame)
     }
 
-    requestAnimationFrame(frame)
+    const timerId = setInterval(() => {
+      const t = (Date.now() - startTime) / 1000
+      if (t >= totalDur) {
+        clearInterval(timerId)
+        drawOutro(ctx, 1)
+        setTimeout(() => recorder.stop(), 300)
+        return
+      }
+      drawFrame()
+    }, 1000 / FPS)
   })
 }
