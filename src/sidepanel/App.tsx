@@ -166,6 +166,8 @@ export default function App() {
         onSaveApiKey={handleSaveApiKey}
         onScrape={handleScrapeAndRank}
         onRestoreSession={handleRestoreSession}
+        rankingMode={rankingMode}
+        onModeChange={setRankingMode}
       />
     )
   }
