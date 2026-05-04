@@ -191,14 +191,14 @@ function buildScriptPrompt(payload: GenerateScriptPayload): string {
     }).join("\n\n")
 
   const modeNote: Record<RankingMode, string> = {
-    default: `You are a reaction content creator with sharp wit. Balanced humor — hype the good ones, call out the bad ones. Think: someone who actually cares about good comments.`,
-    savage: `You are a brutally honest critic. Zero mercy for bad comments — make the roast SPECIFIC to what they said, not generic. For good ones, sound genuinely surprised they exist.`,
-    indian: `You are reacting with full desi energy — like watching this with your bhai in the hostel. Use 'bhai', 'yaar', 'arre', 'kya baat hai' naturally. Roast generic English comments for having zero desi flavor. Hype Bollywood references, IIT jokes, Indian English gems, and 'log kya kahenge' humor HARD. React like an Indian Twitter user, not a generic content creator.`,
+    default: `You are a witty content creator who actually thinks about what comments mean. After reading a comment, you don't just react — you add a quick observation, joke, or callback that makes the viewer think "lmao exactly". Like a comedian doing crowd work but for comment sections.`,
+    savage: `You are a ruthless roaster. After reading each bad comment, add a specific one-liner that burns what they said — not generic insults, actual jokes about the content of their comment. For good ones, add genuine disbelief like you can't believe someone actually wrote something smart.`,
+    indian: `Full desi comedian energy. After reading each comment, add a quick observation in Indian internet style — reference engineering culture, Bollywood, Indian parent logic, or the "log kya kahenge" mindset when relevant. Use 'bhai', 'yaar', 'arre'. For a zoology or science comment, reference NEET/JEE. For gym content, reference "protein bro" culture. Make it feel like Indian Twitter reacting.`,
   }
 
   return `You are writing a voiceover script for a viral Instagram short-form video — a comment tier list reveal.
 
-VIDEO FORMAT: Tiers are revealed WORST to BEST (F → D → C → B → A → S). The S tier at the end is the CLIMAX. Your script must build energy from flat and disappointed (F) to genuinely shocked and hyped (S).
+VIDEO FORMAT: Tiers revealed WORST to BEST (F → D → C → B → A → S). S tier is the CLIMAX. Energy builds from flat/done (F) to genuinely hyped (S).
 
 REEL: @${reel.username}
 CAPTION: "${reel.caption ?? ""}"${reelContext ? `\nCONTEXT: "${reelContext}"` : ""}
@@ -207,20 +207,26 @@ VOICE PERSONA: ${modeNote[mode]}
 TIER BOARD (worst → best):
 ${tierLines}
 
-SCRIPT RULES:
-1. Open each tier with a punchy line that sets its energy — do NOT just say "X tier"
-2. Read each comment in double quotes, then give ONE reaction that is SPECIFIC to what that comment actually says — not a generic "bro" or "wow"
-3. Use "..." for comedic timing pauses — place them where a real person would pause
-4. Use CAPS to mark words that need vocal stress: "this is ACTUALLY insane"
-5. SHORT sentences only. One beat per sentence. No run-ons.
-6. VARY reactions — never use the same reaction word twice in one tier's script
-7. Reference the reel context in reactions when it makes the reaction funnier
-8. Allow 15-25 words per comment + reaction. Scale total length with comment count.
-9. F tier energy = flat, tired, genuinely confused. S tier energy = loud, shocked, can't believe it.
-10. NO hashtags, emojis, markdown, or filler phrases like "let's get into it"
+SCRIPT RULES — follow all of these:
+1. Open each tier with a punchy single line that sets the energy. NOT just "X tier."
+2. For EACH comment do THREE things in order:
+   a. Read it in double quotes
+   b. Give a short punchy reaction (1 sentence, specific to what it says)
+   c. Add ONE follow-up joke or observation about what the comment says about the person — this is where the comedy lives. ONE sentence only.
+3. Use "..." for timing pauses — where a comedian would breathe or let something land
+4. CAPS on words that need stress: "this person really thought they were DEEP"
+5. Short sentences only. Never run-on.
+6. VARY your reactions — no repeated phrases within a tier
+7. Tie jokes back to the reel context when it makes it funnier
+8. WORD BUDGET: each tier narration must be under 30 words total. The video is 50 seconds — audio must match. Be ruthless about cutting.
+9. NO hashtags, emojis, markdown, filler phrases ("let's get into it", "without further ado")
 
-Return ONLY a valid JSON array with tiers in F→S order. No explanation, no markdown:
-[{"tier": "F", "text": "..."}, {"tier": "D", "text": "..."}, ..., {"tier": "S", "text": "..."}]
+EXAMPLE of good comment handling for an A tier zoology comment:
+Input: "My zoology professor said that these birds are very rare"
+Output: ... "My zoology professor said that these birds are very rare." ... Okay wait. An ACTUAL fact. ... This person went to class, took notes, and came back to help us. ... While everyone else is typing "lol" this one's out here doing field research. A tier. Respect.
+
+Return ONLY a valid JSON array, tiers in F→S order, no markdown:
+[{"tier": "F", "text": "..."}, ..., {"tier": "S", "text": "..."}]
 
 Only include tiers that have comments. Tier keys must be uppercase single letters.`
 }

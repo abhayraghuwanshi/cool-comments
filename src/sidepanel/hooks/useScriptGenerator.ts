@@ -13,12 +13,15 @@ export function useScriptGenerator() {
       reelContext?: string
     ): Promise<ScriptResult> => {
       const TIERS: Tier[] = ["S", "A", "B", "C", "D", "F"]
+      const MAX_PER_TIER = 2  // keeps audio ~50s to match video length
       const byTier: Partial<Record<Tier, { text: string; username: string }[]>> = {}
       for (const c of comments) {
         const tier = (c.tier?.toUpperCase() ?? "") as Tier
         if (TIERS.includes(tier)) {
           if (!byTier[tier]) byTier[tier] = []
-          byTier[tier]!.push({ text: c.text, username: c.username })
+          if (byTier[tier]!.length < MAX_PER_TIER) {
+            byTier[tier]!.push({ text: c.text, username: c.username })
+          }
         }
       }
 
