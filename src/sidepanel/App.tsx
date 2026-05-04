@@ -83,6 +83,8 @@ export default function App() {
     setRankingMode(session.rankingMode)
     setRestoredFrom(session.reelData.username)
     setPhase("ready")
+    setCurrentScript(null)
+    setShowScriptPanel(false)
     if (ttsAudio) revokeTierAudio(ttsAudio)
     setTtsAudio(null)
     setShowTtsPanel(false)
@@ -95,6 +97,12 @@ export default function App() {
     setPhase("scraping")
     setErrorMsg("")
     setRestoredFrom(null)
+    // Clear stale script and audio from previous reel
+    setCurrentScript(null)
+    setShowScriptPanel(false)
+    if (ttsAudio) revokeTierAudio(ttsAudio)
+    setTtsAudio(null)
+    setShowTtsPanel(false)
 
     const scrapeResult = await scrape()
     if ("error" in scrapeResult) {
@@ -114,7 +122,7 @@ export default function App() {
     // Pause here — show the context prompt before ranking
     setPendingScrape({ reel: scrapeResult.reel, comments: scrapeResult.comments })
     setPhase("awaiting-context")
-  }, [scrape, rankingMode])
+  }, [scrape, rankingMode, ttsAudio])
 
   const handleContextSubmit = useCallback(async (reelContext: string) => {
     if (!pendingScrape) return
@@ -154,6 +162,9 @@ export default function App() {
         return existing?.locked ? existing : rc
       })
     )
+    // Tiers changed — old script is stale
+    setCurrentScript(null)
+    setShowScriptPanel(false)
     setPhase("ready")
   }, [reelData, comments, rank, rankingMode])
 
@@ -310,7 +321,12 @@ export default function App() {
       )}
 
       {/* Reel info strip */}
-      {reelData && <ReelInfoPanel reel={reelData} />}
+      {reelData && (
+        <ReelInfoPanel
+          reel={reelData}
+          onUsernameChange={(username) => setReelData((r) => r ? { ...r, username } : r)}
+        />
+      )}
 
       {/* Restored banner */}
       {restoredFrom && (
