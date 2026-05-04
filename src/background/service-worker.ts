@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import type {
+  GenerateScriptPayload,
   RankCommentsPayload,
   RankedComment,
   RankingMode,
@@ -67,6 +68,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "RANK_COMMENTS") {
     const payload = message.payload as RankCommentsPayload
     handleRanking(payload).then(sendResponse)
+    return true
+  }
+
+  if (message.type === "GENERATE_SCRIPT") {
+    const payload = message.payload as GenerateScriptPayload
+    handleScriptGeneration(payload).then(sendResponse)
     return true
   }
 })
@@ -150,6 +157,85 @@ Return ONLY a valid JSON array. No explanation. No markdown. Format:
 [{"id": "comment-id", "tier": "S"}, ...]
 
 Include ALL ${comments.length} comments. Every comment gets exactly one tier (S/A/B/C/D/F uppercase).`
+}
+
+async function handleScriptGeneration(payload: GenerateScriptPayload): Promise<object> {
+  const storage = await chrome.storage.local.get("apiKey")
+  const apiKey = storage.apiKey as string | undefined
+  if (!apiKey) return { type: "ERROR", error: "NO_API_KEY" }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" })
+    const prompt = buildScriptPrompt(payload)
+    const result = await model.generateContent(prompt)
+    const text = result.response.text()
+    const scripts = parseScriptResponse(text)
+    return { type: "SCRIPT_RESULT", payload: scripts }
+  } catch (err) {
+    return { type: "ERROR", error: String(err) }
+  }
+}
+
+function buildScriptPrompt(payload: GenerateScriptPayload): string {
+  const { reel, byTier, mode, reelContext } = payload
+
+  // Worst-to-best order — matches the video export reveal format
+  const TIERS_ORDER: Tier[] = ["F", "D", "C", "B", "A", "S"]
+
+  const tierLines = TIERS_ORDER
+    .filter((t) => byTier[t] && byTier[t]!.length > 0)
+    .map((t) => {
+      const comments = byTier[t]!.map((c) => `  - "${c.text}" (@${c.username})`).join("\n")
+      return `${t} tier:\n${comments}`
+    }).join("\n\n")
+
+  const modeNote: Record<RankingMode, string> = {
+    default: `You are a reaction content creator with sharp wit. Balanced humor — hype the good ones, call out the bad ones. Think: someone who actually cares about good comments.`,
+    savage: `You are a brutally honest critic. Zero mercy for bad comments — make the roast SPECIFIC to what they said, not generic. For good ones, sound genuinely surprised they exist.`,
+    indian: `You are reacting with full desi energy — like watching this with your bhai in the hostel. Use 'bhai', 'yaar', 'arre', 'kya baat hai' naturally. Roast generic English comments for having zero desi flavor. Hype Bollywood references, IIT jokes, Indian English gems, and 'log kya kahenge' humor HARD. React like an Indian Twitter user, not a generic content creator.`,
+  }
+
+  return `You are writing a voiceover script for a viral Instagram short-form video — a comment tier list reveal.
+
+VIDEO FORMAT: Tiers are revealed WORST to BEST (F → D → C → B → A → S). The S tier at the end is the CLIMAX. Your script must build energy from flat and disappointed (F) to genuinely shocked and hyped (S).
+
+REEL: @${reel.username}
+CAPTION: "${reel.caption ?? ""}"${reelContext ? `\nCONTEXT: "${reelContext}"` : ""}
+VOICE PERSONA: ${modeNote[mode]}
+
+TIER BOARD (worst → best):
+${tierLines}
+
+SCRIPT RULES:
+1. Open each tier with a punchy line that sets its energy — do NOT just say "X tier"
+2. Read each comment in double quotes, then give ONE reaction that is SPECIFIC to what that comment actually says — not a generic "bro" or "wow"
+3. Use "..." for comedic timing pauses — place them where a real person would pause
+4. Use CAPS to mark words that need vocal stress: "this is ACTUALLY insane"
+5. SHORT sentences only. One beat per sentence. No run-ons.
+6. VARY reactions — never use the same reaction word twice in one tier's script
+7. Reference the reel context in reactions when it makes the reaction funnier
+8. Allow 15-25 words per comment + reaction. Scale total length with comment count.
+9. F tier energy = flat, tired, genuinely confused. S tier energy = loud, shocked, can't believe it.
+10. NO hashtags, emojis, markdown, or filler phrases like "let's get into it"
+
+Return ONLY a valid JSON array with tiers in F→S order. No explanation, no markdown:
+[{"tier": "F", "text": "..."}, {"tier": "D", "text": "..."}, ..., {"tier": "S", "text": "..."}]
+
+Only include tiers that have comments. Tier keys must be uppercase single letters.`
+}
+
+function parseScriptResponse(text: string): { tier: Tier; text: string }[] {
+  try {
+    const cleaned = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim()
+    const parsed = JSON.parse(cleaned) as { tier: string; text: string }[]
+    const validTiers = new Set<Tier>(["S", "A", "B", "C", "D", "F"])
+    return parsed
+      .filter((s) => validTiers.has(s.tier as Tier) && typeof s.text === "string" && s.text.trim())
+      .map((s) => ({ tier: s.tier as Tier, text: s.text.trim() }))
+  } catch {
+    return []
+  }
 }
 
 function parseRankingResponse(text: string, comments: RawComment[]): RankedComment[] {
