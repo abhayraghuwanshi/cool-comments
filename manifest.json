@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ReelRanker",
   "version": "0.1.0",
-  "description": "AI ranks Instagram reel comments into tier lists, generates scripts, reads them aloud with voice TTS, and exports as green screen reels",
+  "description": "AI ranks Instagram reel comments into tier lists, generates scripts, reads aloud with TTS, and exports as green screen reels",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
