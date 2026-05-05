@@ -182,15 +182,17 @@ function drawTierScene(
   tierComments: RankedComment[],
   labelProgress: number,
   visibleCount: number,
-  currentSlide: number
+  currentSlide: number,
+  overlay = false
 ) {
   const color = TIER_COLOR[tier]
 
-  ctx.fillStyle = "#080808"
+  ctx.clearRect(0, 0, W, H)
+  ctx.fillStyle = overlay ? GREEN_SCREEN : "#080808"
   ctx.fillRect(0, 0, W, H)
 
   const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, W)
-  glow.addColorStop(0, color + "1a")
+  glow.addColorStop(0, color + (overlay ? "30" : "1a"))
   glow.addColorStop(1, "transparent")
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, W, H)
@@ -364,6 +366,100 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
         return
       }
       drawFrame()
+    }, 1000 / FPS)
+  })
+}
+
+const GREEN_SCREEN = "#00FF00"  // chroma key color — remove in CapCut with Chroma Key tool
+
+// Green-screen overlay export — use in CapCut: Overlay → Chroma Key → pick green → done.
+export async function exportOverlayVideo(comments: RankedComment[]): Promise<void> {
+  await document.fonts.ready
+
+  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [] }
+  for (const c of comments) {
+    const tier = (c.tier?.toUpperCase() ?? "") as Tier
+    if (tier in byTier) byTier[tier].push(c)
+  }
+
+  const canvas = document.createElement("canvas")
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext("2d")!
+
+  const mimeType =
+    MediaRecorder.isTypeSupported("video/mp4;codecs=avc1") ? "video/mp4;codecs=avc1" :
+    MediaRecorder.isTypeSupported("video/mp4")             ? "video/mp4"             :
+    MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" :
+                                                             "video/webm"
+  const ext = mimeType.startsWith("video/mp4") ? "mp4" : "webm"
+
+  const recorder = new MediaRecorder(canvas.captureStream(FPS), {
+    mimeType,
+    videoBitsPerSecond: 8_000_000,
+  })
+  const chunks: Blob[] = []
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+
+  function tierDur(tier: Tier) {
+    const n = byTier[tier].length
+    return LABEL_DUR + (n === 0 ? EMPTY_DUR : n * COMMENT_DUR)
+  }
+
+  const tierStarts: number[] = []
+  let cursor = 0
+  for (const tier of TIERS_ORDER) {
+    tierStarts.push(cursor)
+    cursor += tierDur(tier)
+  }
+  const totalDur = cursor
+
+  await new Promise<void>((resolve) => {
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `cool-comments-overlay-${Date.now()}.${ext}`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      resolve()
+    }
+
+    recorder.start(200)
+    const startTime = Date.now()
+
+    const timerId = setInterval(() => {
+      const t = (Date.now() - startTime) / 1000
+
+      if (t >= totalDur) {
+        clearInterval(timerId)
+        ctx.clearRect(0, 0, W, H)
+        setTimeout(() => recorder.stop(), 300)
+        return
+      }
+
+      let ti = TIERS_ORDER.length - 1
+      for (let i = 0; i < TIERS_ORDER.length - 1; i++) {
+        if (t < tierStarts[i + 1]) { ti = i; break }
+      }
+      const tier = TIERS_ORDER[ti]
+      const te = t - tierStarts[ti]
+      const tierComments = byTier[tier]
+
+      let labelProgress: number, visibleCount: number, currentSlide: number
+      if (te < LABEL_DUR) {
+        labelProgress = te / LABEL_DUR; visibleCount = 0; currentSlide = 0
+      } else {
+        labelProgress = 1
+        const ce = te - LABEL_DUR
+        const ci = Math.floor(ce / COMMENT_DUR)
+        visibleCount = Math.min(ci, tierComments.length)
+        currentSlide = ci < tierComments.length
+          ? Math.min((ce - ci * COMMENT_DUR) / SLIDE_DUR, 1)
+          : 0
+      }
+
+      drawTierScene(ctx, tier, tierComments, labelProgress, visibleCount, currentSlide, true)
     }, 1000 / FPS)
   })
 }

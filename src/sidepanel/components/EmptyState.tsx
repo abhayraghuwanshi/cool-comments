@@ -6,8 +6,11 @@ import type { RankingMode } from "../../shared/messages"
 interface Props {
   error?: string
   showSettings: boolean
+  onToggleSettings: () => void
   apiKey: string
   onApiKeyChange: (key: string) => void
+  openAiApiKey: string
+  onOpenAiApiKeyChange: (key: string) => void
   onSaveApiKey: () => void
   onScrape: () => void
   onRestoreSession: (session: SavedSession) => void
@@ -16,7 +19,7 @@ interface Props {
 }
 
 export function EmptyState({
-  error, showSettings, apiKey, onApiKeyChange,
+  error, showSettings, onToggleSettings, apiKey, onApiKeyChange, openAiApiKey, onOpenAiApiKeyChange,
   onSaveApiKey, onScrape, onRestoreSession, rankingMode, onModeChange,
 }: Props) {
   const [sessions, setSessions] = useState<Pick<SavedSession, "reelUrl" | "reelData" | "savedAt">[]>([])
@@ -64,20 +67,35 @@ export function EmptyState({
 
       {/* API key settings */}
       {showSettings && (
-        <div className="px-4 py-2.5 border-b border-[#222] bg-[#141414] flex gap-2 items-center">
-          <input
-            type="password"
-            placeholder="Gemini API key (AIza...)"
-            value={apiKey}
-            onChange={(e) => onApiKeyChange(e.target.value)}
-            className="flex-1 bg-[#0f0f0f] border border-[#333] focus:border-[#FF6B35] rounded-sm px-2 py-1 font-mono text-[11px] text-white placeholder-[#444] outline-none transition-colors"
-          />
-          <button
-            onClick={onSaveApiKey}
-            className="font-ui text-[11px] font-bold tracking-widest px-3 py-1 rounded-sm bg-[#FF6B35] text-black hover:bg-[#ff8050] transition-colors"
-          >
-            SAVE
-          </button>
+        <div className="px-4 py-2.5 border-b border-[#222] bg-[#141414] flex flex-col gap-1.5">
+          <div className="flex gap-2 items-center">
+            <span className="font-mono text-[9px] text-[#555] w-14 shrink-0">Gemini</span>
+            <input
+              type="password"
+              placeholder="AIza..."
+              value={apiKey}
+              onChange={(e) => onApiKeyChange(e.target.value)}
+              className="flex-1 bg-[#0f0f0f] border border-[#333] focus:border-[#FF6B35] rounded-sm px-2 py-1 font-mono text-[11px] text-white placeholder-[#444] outline-none transition-colors"
+            />
+          </div>
+          <div className="flex gap-2 items-center">
+            <span className="font-mono text-[9px] text-[#555] w-14 shrink-0">OpenAI</span>
+            <input
+              type="password"
+              placeholder="sk-..."
+              value={openAiApiKey}
+              onChange={(e) => onOpenAiApiKeyChange(e.target.value)}
+              className="flex-1 bg-[#0f0f0f] border border-[#333] focus:border-[#FF6B35] rounded-sm px-2 py-1 font-mono text-[11px] text-white placeholder-[#444] outline-none transition-colors"
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={onSaveApiKey}
+              className="font-ui text-[11px] font-bold tracking-widest px-3 py-1 rounded-sm bg-[#FF6B35] text-black hover:bg-[#ff8050] transition-colors"
+            >
+              SAVE
+            </button>
+          </div>
         </div>
       )}
 
@@ -108,11 +126,11 @@ export function EmptyState({
           </button>
 
           <button
-            onClick={onSaveApiKey}
+            onClick={onToggleSettings}
             className="group flex items-center gap-2 py-1 text-left w-full"
           >
             <span className="font-mono text-[11px] text-[#666]">⚙</span>
-            <span className="font-ui text-[13px] font-semibold text-[#888] hover:text-white transition-colors leading-tight">
+            <span className={`font-ui text-[13px] font-semibold transition-colors leading-tight ${showSettings ? "text-[#FF6B35]" : "text-[#888] hover:text-white"}`}>
               API Settings
             </span>
           </button>
