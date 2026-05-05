@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Cool Comments",
+  "name": "ReelRanker",
   "version": "0.1.0",
-  "description": "AI-powered tier list for Instagram reel comments",
+  "description": "AI ranks Instagram reel comments into tier lists, generates scripts, reads them aloud with voice TTS, and exports as green screen reels",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Cool Comments"
+    "default_title": "ReelRanker"
   },
   "side_panel": {
     "default_path": "src/sidepanel/index.html"
@@ -28,6 +28,7 @@
   "permissions": ["sidePanel", "activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://www.instagram.com/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.openai.com/*"
   ]
 }

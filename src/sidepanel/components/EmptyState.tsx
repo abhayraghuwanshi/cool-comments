@@ -51,8 +51,8 @@ export function EmptyState({
       {/* Header */}
       <div className="px-4 pt-5 pb-3 border-b border-[#222]">
         <div className="font-display leading-[0.9]">
-          <span className="text-[44px] text-white">COOL </span>
-          <span className="text-[44px]" style={{ color: '#FF6B35' }}>COMMENTS</span>
+          <span className="text-[44px] text-white">REEL </span>
+          <span className="text-[44px]" style={{ color: '#FF6B35' }}>RANKER</span>
         </div>
         <p className="font-mono text-[10px] text-[#555] tracking-[0.15em] uppercase mt-1.5">
           verdict machine · instagram reels
