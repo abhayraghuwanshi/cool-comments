@@ -8,6 +8,7 @@ export interface ReelData {
   reelUrl: string
   likesCount: string
   commentsCount: string
+  thumbnailUrl?: string
 }
 
 export interface RawComment {
@@ -28,6 +29,8 @@ export type MessageType =
   | "SCRAPE_RESULT"
   | "RANK_COMMENTS"
   | "RANK_RESULT"
+  | "GENERATE_SCRIPT"
+  | "SCRIPT_RESULT"
   | "ERROR"
 
 export interface ScrapeResultPayload {
@@ -38,6 +41,13 @@ export interface ScrapeResultPayload {
 export interface RankCommentsPayload {
   reel: ReelData
   comments: RawComment[]
+  mode: RankingMode
+  reelContext?: string
+}
+
+export interface GenerateScriptPayload {
+  reel: ReelData
+  byTier: Partial<Record<Tier, { text: string; username: string }[]>>
   mode: RankingMode
   reelContext?: string
 }

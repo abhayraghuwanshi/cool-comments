@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import type {
+  GenerateScriptPayload,
   RankCommentsPayload,
   RankedComment,
   RankingMode,
@@ -69,6 +70,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     handleRanking(payload).then(sendResponse)
     return true
   }
+
+  if (message.type === "GENERATE_SCRIPT") {
+    const payload = message.payload as GenerateScriptPayload
+    handleScriptGeneration(payload).then(sendResponse)
+    return true
+  }
 })
 
 async function handleRanking(payload: RankCommentsPayload): Promise<object> {
@@ -97,40 +104,144 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
 }
 
 function buildPrompt(reel: ReelData, comments: RawComment[], mode: RankingMode, reelContext?: string): string {
-  const modeInstruction: Record<RankingMode, string> = {
-    default: "Rank based on humor, wit, originality, and cleverness.",
-    savage: "Rank harshly. Only truly devastating or brilliant comments get S or A. Be merciless with mediocrity.",
-    indian: "Rank with extra points for desi humor, Bollywood references, Indian English quirks, chai references, and regional jokes that resonate with an Indian audience.",
-  }
-
   const contextLine = reelContext
     ? `- What this reel is about: "${reelContext}"`
     : `- Caption: "${reel.caption}"`
+
+  const modeBlock: Record<RankingMode, string> = {
+    default: `
+TIER DEFINITIONS:
+S - Legendary. Stops your scroll. Instantly quotable or perfectly timed.
+A - Genuinely funny or clever. Clearly above average. Made you laugh out loud.
+B - Solid joke. Gets a chuckle. Nothing wrong but nothing special.
+C - Generic reaction. Low effort but inoffensive. Basic comment energy.
+D - Cringe, try-hard, unfunny, or painfully mid.
+F - Spam, off-topic, emoji-only, or painful to read.
+
+INSTRUCTIONS: Judge purely on humor, wit, and originality. Spread comments across all tiers — do not cluster everything in B/C.`,
+
+    savage: `
+TIER DEFINITIONS:
+S - Once-in-a-lifetime comment. Completely stops your scroll. Devastating wit or perfect callback.
+A - Legitimately clever or funny. Rare. Most people couldn't write this.
+B - Acceptable. Has a point. Still kind of mid though.
+C - Mediocre filler. Forgettable within 2 seconds.
+D - Cringe, try-hard, or just embarrassing to read.
+F - Basic, spam, generic reaction, or any comment a bot could write.
+
+INSTRUCTIONS: You are a brutal critic. The bar for S and A is extremely high — only 1-2 comments max should reach S. MOST comments in any reel section are D or F tier. Do NOT be generous. If a comment made you think "that's fine", it is a D. Generic compliments, basic reactions, and low-effort one-liners are all F.`,
+
+    indian: `
+TIER DEFINITIONS:
+S - Peak desi comment. Instantly relatable to any Indian. Possibly goes viral in Indian WhatsApp groups.
+A - Strong desi humor. Bollywood reference, Indian English gem, or regional joke that lands perfectly.
+B - Has some desi flavor. Decent humor even if not fully Indian-coded.
+C - Generic comment. No desi flavor. Could have been written by anyone anywhere.
+D - Cringe, try-hard, or imports Western humor that doesn't land for an Indian audience.
+F - Spam, emoji-only, or completely irrelevant.
+
+INSTRUCTIONS: You are judging from a pure desi internet perspective. BONUS TIER for: "bhai/yaar" energy, Bollywood puns, engineering/IIT/UPSC memes, mom-dad-"log kya kahenge" jokes, Indian English quirks ("doing the needful", "out of station", "prepone"), regional slips ("ek dum", "bindaas", "jugaad"), uncle-aunty observations. PENALISE comments that are generic English internet humor with zero desi flavor — those are C or D regardless of how funny they might seem globally.`,
+  }
 
   return `You are a comment tier-list judge for Instagram reels.
 
 REEL CONTEXT:
 - Creator: @${reel.username}
 ${contextLine}
-
-RANKING INSTRUCTIONS:
-${modeInstruction[mode]}
-
-TIER DEFINITIONS:
-S - Legendary. Instantly shareable. Perfect timing or devastating wit.
-A - Very funny or clever. Clearly above average.
-B - Solid. Gets a laugh but nothing special.
-C - Generic or mid. Standard comment energy.
-D - Boring, cringe, or try-hard.
-F - Spam, irrelevant, or painful to read.
+${modeBlock[mode]}
 
 COMMENTS TO RANK:
 ${JSON.stringify(comments.map((c) => ({ id: c.id, text: c.text, likes: c.likesCount, reply: c.isReply ?? false })))}
 
-Return ONLY a valid JSON array. No explanation. No markdown code fences. Format:
+Return ONLY a valid JSON array. No explanation. No markdown. Format:
 [{"id": "comment-id", "tier": "S"}, ...]
 
-Include all ${comments.length} comments. Every comment gets exactly one tier.`
+Include ALL ${comments.length} comments. Every comment gets exactly one tier (S/A/B/C/D/F uppercase).`
+}
+
+async function handleScriptGeneration(payload: GenerateScriptPayload): Promise<object> {
+  const storage = await chrome.storage.local.get("apiKey")
+  const apiKey = storage.apiKey as string | undefined
+  if (!apiKey) return { type: "ERROR", error: "NO_API_KEY" }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" })
+    const prompt = buildScriptPrompt(payload)
+    const result = await model.generateContent(prompt)
+    const text = result.response.text()
+    const scripts = parseScriptResponse(text)
+    return { type: "SCRIPT_RESULT", payload: scripts }
+  } catch (err) {
+    return { type: "ERROR", error: String(err) }
+  }
+}
+
+function buildScriptPrompt(payload: GenerateScriptPayload): string {
+  const { reel, byTier, mode, reelContext } = payload
+
+  // Worst-to-best order — matches the video export reveal format
+  const TIERS_ORDER: Tier[] = ["F", "D", "C", "B", "A", "S"]
+
+  const tierLines = TIERS_ORDER
+    .filter((t) => byTier[t] && byTier[t]!.length > 0)
+    .map((t) => {
+      const comments = byTier[t]!.map((c) => `  - "${c.text}" (@${c.username})`).join("\n")
+      return `${t} tier:\n${comments}`
+    }).join("\n\n")
+
+  const modeNote: Record<RankingMode, string> = {
+    default: `You are a witty content creator who actually thinks about what comments mean. After reading a comment, you don't just react — you add a quick observation, joke, or callback that makes the viewer think "lmao exactly". Like a comedian doing crowd work but for comment sections.`,
+    savage: `You are a ruthless roaster. After reading each bad comment, add a specific one-liner that burns what they said — not generic insults, actual jokes about the content of their comment. For good ones, add genuine disbelief like you can't believe someone actually wrote something smart.`,
+    indian: `Full desi comedian energy. After reading each comment, add a quick observation in Indian internet style — reference engineering culture, Bollywood, Indian parent logic, or the "log kya kahenge" mindset when relevant. Use 'bhai', 'yaar', 'arre'. For a zoology or science comment, reference NEET/JEE. For gym content, reference "protein bro" culture. Make it feel like Indian Twitter reacting.`,
+  }
+
+  return `You are writing a voiceover script for a viral Instagram short-form video — a comment tier list reveal.
+
+VIDEO FORMAT: Tiers revealed WORST to BEST (F → D → C → B → A → S). S tier is the CLIMAX. Energy builds from flat/done (F) to genuinely hyped (S).
+
+REEL: @${reel.username}
+CAPTION: "${reel.caption ?? ""}"${reelContext ? `\nCONTEXT: "${reelContext}"` : ""}
+VOICE PERSONA: ${modeNote[mode]}
+
+TIER BOARD (worst → best):
+${tierLines}
+
+SCRIPT RULES — follow all of these:
+1. Open each tier with a punchy single line that sets the energy. NOT just "X tier."
+2. For EACH comment do THREE things in order:
+   a. Read it in double quotes
+   b. Give a short punchy reaction (1 sentence, specific to what it says)
+   c. Add ONE follow-up joke or observation about what the comment says about the person — this is where the comedy lives. ONE sentence only.
+3. Use "..." for timing pauses — where a comedian would breathe or let something land
+4. CAPS on words that need stress: "this person really thought they were DEEP"
+5. Short sentences only. Never run-on.
+6. VARY your reactions — no repeated phrases within a tier
+7. Tie jokes back to the reel context when it makes it funnier
+8. WORD BUDGET: each tier narration must be under 30 words total. The video is 50 seconds — audio must match. Be ruthless about cutting.
+9. NO hashtags, emojis, markdown, filler phrases ("let's get into it", "without further ado")
+
+EXAMPLE of good comment handling for an A tier zoology comment:
+Input: "My zoology professor said that these birds are very rare"
+Output: ... "My zoology professor said that these birds are very rare." ... Okay wait. An ACTUAL fact. ... This person went to class, took notes, and came back to help us. ... While everyone else is typing "lol" this one's out here doing field research. A tier. Respect.
+
+Return ONLY a valid JSON array, tiers in F→S order, no markdown:
+[{"tier": "F", "text": "..."}, ..., {"tier": "S", "text": "..."}]
+
+Only include tiers that have comments. Tier keys must be uppercase single letters.`
+}
+
+function parseScriptResponse(text: string): { tier: Tier; text: string }[] {
+  try {
+    const cleaned = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim()
+    const parsed = JSON.parse(cleaned) as { tier: string; text: string }[]
+    const validTiers = new Set<Tier>(["S", "A", "B", "C", "D", "F"])
+    return parsed
+      .filter((s) => validTiers.has(s.tier as Tier) && typeof s.text === "string" && s.text.trim())
+      .map((s) => ({ tier: s.tier as Tier, text: s.text.trim() }))
+  } catch {
+    return []
+  }
 }
 
 function parseRankingResponse(text: string, comments: RawComment[]): RankedComment[] {
