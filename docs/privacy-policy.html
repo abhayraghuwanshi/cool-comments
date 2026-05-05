@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — ReelRanker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #c8c8c8;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      padding: 48px 24px 80px;
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .brand {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+    }
+    .brand span { color: #FF6B35; }
+
+    .tagline {
+      font-size: 12px;
+      color: #444;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 48px;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .updated {
+      font-size: 12px;
+      color: #444;
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #FF6B35;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin: 36px 0 10px;
+    }
+
+    p { margin-bottom: 12px; color: #999; }
+
+    ul {
+      padding-left: 20px;
+      margin-bottom: 12px;
+    }
+
+    ul li {
+      color: #999;
+      margin-bottom: 6px;
+    }
+
+    strong { color: #ddd; font-weight: 600; }
+
+    a { color: #FF6B35; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      margin: 40px 0;
+    }
+
+    .footer {
+      font-size: 12px;
+      color: #333;
+      margin-top: 48px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="brand">REEL<span>RANKER</span></div>
+    <div class="tagline">Chrome Extension</div>
+
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: May 5, 2025</p>
+
+    <p>
+      ReelRanker is a Chrome extension that scrapes Instagram reel comments,
+      ranks them using AI, and lets you build and export tier lists. This policy
+      explains what data we access and how it is handled.
+    </p>
+
+    <h2>Data We Access</h2>
+    <p>When you use ReelRanker on an Instagram reel page, the extension reads:</p>
+    <ul>
+      <li>The reel caption and username visible on the page</li>
+      <li>Comments and like counts visible in the DOM</li>
+      <li>The profile picture URL of the reel author</li>
+    </ul>
+    <p>
+      This data is scraped directly from the page you are viewing. It is never
+      sent to any ReelRanker server — there is no backend.
+    </p>
+
+    <h2>API Keys</h2>
+    <p>
+      ReelRanker requires you to provide your own API keys for Gemini (Google)
+      and OpenAI. These keys are:
+    </p>
+    <ul>
+      <li>Stored locally in Chrome's <strong>chrome.storage.local</strong> on your device only</li>
+      <li>Never transmitted to any ReelRanker server</li>
+      <li>Sent directly from your browser to Google and OpenAI when you trigger a ranking or TTS action</li>
+    </ul>
+    <p>
+      Your use of those APIs is governed by
+      <a href="https://policies.google.com/privacy" target="_blank">Google's Privacy Policy</a>
+      and <a href="https://openai.com/policies/privacy-policy" target="_blank">OpenAI's Privacy Policy</a>.
+    </p>
+
+    <h2>Session Data</h2>
+    <p>
+      Tier list sessions (reel info, ranked comments, ranking mode) are saved
+      locally in your browser using IndexedDB. This data never leaves your
+      device and can be deleted at any time by clearing the extension's storage
+      in Chrome settings.
+    </p>
+
+    <h2>Data Sharing</h2>
+    <p>
+      We do not collect, store, sell, or share any personal data. ReelRanker
+      has no analytics, no telemetry, and no backend servers.
+    </p>
+
+    <h2>Third-Party Services</h2>
+    <p>
+      When you use AI features, scraped reel and comment text is sent to the
+      respective API provider (Google Gemini or OpenAI) using your own API key.
+      Please review their privacy policies before use.
+    </p>
+
+    <h2>Permissions Explained</h2>
+    <ul>
+      <li><strong>sidePanel</strong> — displays the extension UI alongside Instagram</li>
+      <li><strong>activeTab</strong> — reads the current tab to access the reel page</li>
+      <li><strong>scripting</strong> — injects the comment scraper into Instagram pages</li>
+      <li><strong>storage</strong> — saves API keys and sessions locally on your device</li>
+    </ul>
+
+    <h2>Children's Privacy</h2>
+    <p>
+      ReelRanker is not directed at children under 13. We do not knowingly
+      collect any information from children.
+    </p>
+
+    <h2>Changes to This Policy</h2>
+    <p>
+      If this policy changes, the updated version will be posted at this URL
+      with a revised date at the top.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions? Reach out at
+      <a href="mailto:raghuwanshi.abhay405@gmail.com">raghuwanshi.abhay405@gmail.com</a>
+    </p>
+
+    <hr />
+
+    <div class="footer">
+      &copy; 2025 ReelRanker. All rights reserved.
+    </div>
+
+  </div>
+</body>
+</html>
