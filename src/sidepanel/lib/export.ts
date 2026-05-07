@@ -3,7 +3,7 @@ import type { RankedComment, Tier } from "../../shared/messages"
 const TIERS: Tier[] = ["S", "A", "B", "C", "D", "F"]
 const TIER_COLOR: Record<Tier, string> = {
   S: "#FF6B35", A: "#39FF14", B: "#00B4FF",
-  C: "#CC44FF", D: "#FFB300", F: "#FF1744",
+  C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a",
 }
 
 const W         = 480   // canvas width
@@ -153,7 +153,7 @@ export async function exportTierBoard(
   // Measure total height first
   setupCtx(ctx)
   const byTier: Record<Tier, RankedComment[]> = {
-    S: [], A: [], B: [], C: [], D: [], F: [],
+    S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [],
   }
   for (const c of comments) byTier[c.tier].push(c)
 

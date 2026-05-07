@@ -7,7 +7,7 @@ const FPS = 30
 const TIERS_ORDER: Tier[] = ["F", "D", "C", "B", "A", "S"]
 const TIER_COLOR: Record<Tier, string> = {
   S: "#FF6B35", A: "#39FF14", B: "#00B4FF",
-  C: "#CC44FF", D: "#FFB300", F: "#FF1744",
+  C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a",
 }
 
 const INTRO_DUR   = 3.0
@@ -267,7 +267,7 @@ function loadImg(src: string): Promise<HTMLImageElement | null> {
 export async function exportReelVideo(reelData: ReelData, comments: RankedComment[]): Promise<void> {
   await document.fonts.ready
 
-  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [] }
+  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [] }
   for (const c of comments) {
     const tier = (c.tier?.toUpperCase() ?? "") as Tier
     if (tier in byTier) byTier[tier].push(c)
@@ -376,7 +376,7 @@ const GREEN_SCREEN = "#00FF00"  // chroma key color — remove in CapCut with Ch
 export async function exportOverlayVideo(comments: RankedComment[]): Promise<void> {
   await document.fonts.ready
 
-  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [] }
+  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [] }
   for (const c of comments) {
     const tier = (c.tier?.toUpperCase() ?? "") as Tier
     if (tier in byTier) byTier[tier].push(c)

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import type { RankedComment } from "../../shared/messages"
@@ -7,11 +8,22 @@ interface Props {
   tierColor: string
   index: number
   isDragging?: boolean
+  deleteTitle?: string
   onLock: (id: string) => void
   onDelete: (id: string) => void
 }
 
-export function CommentCard({ comment, tierColor, index, isDragging = false, onLock, onDelete }: Props) {
+export function CommentCard({ comment, tierColor, index, isDragging = false, deleteTitle = "Move to Draft", onLock, onDelete }: Props) {
+  const [copied, setCopied] = useState(false)
+
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation()
+    navigator.clipboard.writeText(comment.text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
   const {
     attributes, listeners, setNodeRef,
     transform, transition,
@@ -64,6 +76,14 @@ export function CommentCard({ comment, tierColor, index, isDragging = false, onL
       <div className="absolute right-1.5 top-1.5 hidden group-hover:flex gap-0.5">
         <button
           onPointerDown={(e) => e.stopPropagation()}
+          onClick={handleCopy}
+          title="Copy comment"
+          className="w-5 h-5 flex items-center justify-center rounded-sm bg-[#252525] hover:bg-[#333] font-mono text-[9px] text-[#888] hover:text-white transition-colors"
+        >
+          {copied ? "✓" : "⎘"}
+        </button>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onLock(comment.id) }}
           title={comment.locked ? "Unlock" : "Lock"}
           className="w-5 h-5 flex items-center justify-center rounded-sm bg-[#252525] hover:bg-[#333] font-mono text-[9px] text-[#888] hover:text-white transition-colors"
@@ -73,7 +93,7 @@ export function CommentCard({ comment, tierColor, index, isDragging = false, onL
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onDelete(comment.id) }}
-          title="Delete"
+          title={deleteTitle}
           className="w-5 h-5 flex items-center justify-center rounded-sm bg-[#252525] hover:bg-red-950 font-mono text-[9px] text-[#888] hover:text-red-400 transition-colors"
         >
           ✕

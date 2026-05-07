@@ -1,4 +1,4 @@
-export type Tier = "S" | "A" | "B" | "C" | "D" | "F"
+export type Tier = "S" | "A" | "B" | "C" | "D" | "F" | "DRAFT"
 export type RankingMode = "default" | "savage" | "indian"
 
 export interface ReelData {

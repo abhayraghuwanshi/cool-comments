@@ -2,7 +2,7 @@ import type { Tier } from "../../shared/messages"
 import type { TierScript } from "../lib/ttsScript"
 
 const TIER_COLORS: Record<Tier, string> = {
-  S: "#FF6B35", A: "#39FF14", B: "#00B4FF", C: "#CC44FF", D: "#FFB300", F: "#FF1744",
+  S: "#FF6B35", A: "#39FF14", B: "#00B4FF", C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a",
 }
 
 interface Props {
