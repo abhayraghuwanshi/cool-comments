@@ -90,14 +90,38 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
     return { type: "ERROR", error: "NO_COMMENTS_SCRAPED" }
   }
 
+  // GIF comments skip AI ranking — they go straight to the GIF tier
+  const gifComments = payload.comments.filter((c) => c.gifUrl)
+  const textComments = payload.comments.filter((c) => !c.gifUrl)
+
+  const gifRanked: RankedComment[] = gifComments.map((c) => ({
+    ...c,
+    tier: "GIF" as Tier,
+    locked: false,
+  }))
+
+  if (textComments.length === 0) {
+    return { type: "RANK_RESULT", payload: gifRanked }
+  }
+
+  // Scrape/List mode: skip AI entirely, put everything in one flat list
+  if (payload.mode === "scrape") {
+    const listRanked: RankedComment[] = textComments.map((c) => ({
+      ...c,
+      tier: "A" as Tier,
+      locked: false,
+    }))
+    return { type: "RANK_RESULT", payload: [...listRanked, ...gifRanked] }
+  }
+
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })
-    const prompt = buildPrompt(payload.reel, payload.comments, payload.mode, payload.reelContext)
+    const prompt = buildPrompt(payload.reel, textComments, payload.mode, payload.reelContext)
     const result = await model.generateContent(prompt)
     const text = result.response.text()
-    const ranked = parseRankingResponse(text, payload.comments)
-    return { type: "RANK_RESULT", payload: ranked }
+    const ranked = parseRankingResponse(text, textComments)
+    return { type: "RANK_RESULT", payload: [...ranked, ...gifRanked] }
   } catch (err) {
     return { type: "ERROR", error: String(err) }
   }

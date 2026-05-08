@@ -142,6 +142,7 @@ export function EmptyState({
           </p>
 
           {([
+            { mode: 'scrape'  as RankingMode, label: '📋 List',   color: '#888',    desc: 'No AI, just comments' },
             { mode: 'default' as RankingMode, label: 'Normal',    color: '#ccc',    desc: 'Balanced' },
             { mode: 'savage'  as RankingMode, label: '☠ Savage', color: '#FF1744', desc: 'Harsh verdicts' },
             { mode: 'indian'  as RankingMode, label: '🇮🇳 Desi',  color: '#FF6B35', desc: 'Desi humor' },

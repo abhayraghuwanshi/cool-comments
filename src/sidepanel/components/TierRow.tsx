@@ -11,6 +11,7 @@ const TIER_COLOR: Record<Tier, string> = {
   D: '#FFB300',
   F: '#FF1744',
   DRAFT: '#4a4a4a',
+  GIF: '#FFD700',
 }
 
 interface Props {
@@ -18,12 +19,13 @@ interface Props {
   comments: RankedComment[]
   globalOffset: number
   isDraft?: boolean
+  customLabel?: string
   deleteTitle?: string
   onLock: (id: string) => void
   onDelete: (id: string) => void
 }
 
-export function TierRow({ tier, comments, globalOffset, isDraft, deleteTitle, onLock, onDelete }: Props) {
+export function TierRow({ tier, comments, globalOffset, isDraft, customLabel, deleteTitle, onLock, onDelete }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: tier })
   const color = TIER_COLOR[tier]
 
@@ -44,6 +46,21 @@ export function TierRow({ tier, comments, globalOffset, isDraft, deleteTitle, on
           <div className="flex-1 flex items-center gap-2 overflow-hidden">
             <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, #33333360, transparent)' }} />
             <span className="font-mono text-[10px] text-[#444] shrink-0 tabular-nums">
+              {comments.length > 0 ? comments.length : '—'}
+            </span>
+          </div>
+        </div>
+      ) : customLabel ? (
+        <div className="flex items-center gap-3 px-3 pt-3 pb-1">
+          <span
+            className="font-mono text-[12px] font-bold tracking-[0.2em] uppercase select-none"
+            style={{ color: '#888' }}
+          >
+            {customLabel}
+          </span>
+          <div className="flex-1 flex items-center gap-2 overflow-hidden">
+            <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, #44444460, transparent)' }} />
+            <span className="font-mono text-[10px] text-[#555] shrink-0 tabular-nums">
               {comments.length > 0 ? comments.length : '—'}
             </span>
           </div>

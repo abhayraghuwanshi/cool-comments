@@ -1,5 +1,5 @@
-export type Tier = "S" | "A" | "B" | "C" | "D" | "F" | "DRAFT"
-export type RankingMode = "default" | "savage" | "indian"
+export type Tier = "S" | "A" | "B" | "C" | "D" | "F" | "DRAFT" | "GIF"
+export type RankingMode = "default" | "savage" | "indian" | "scrape"
 
 export interface ReelData {
   username: string
@@ -17,6 +17,7 @@ export interface RawComment {
   text: string
   likesCount: string
   isReply?: boolean
+  gifUrl?: string
 }
 
 export interface RankedComment extends RawComment {

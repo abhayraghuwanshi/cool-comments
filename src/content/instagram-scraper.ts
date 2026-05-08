@@ -1,6 +1,9 @@
 import type { ReelData, RawComment } from "../shared/messages"
 
+console.log("[instagram-scraper] content script loaded on:", location.href)
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  console.log("[instagram-scraper] message received:", message.type)
   if (message.type !== "SCRAPE_REEL") return
 
   const onInstagramPost =
@@ -78,6 +81,15 @@ function scrapeComments(limit: number): RawComment[] {
   const seen = new Set<string>()
 
   const usernameSpans = document.querySelectorAll<HTMLElement>("span._ap3a._aacw, span._aacw")
+  console.log("[scraper] username spans found:", usernameSpans.length)
+
+  // Also log ALL imgs on the page so we can see GIF candidates
+  const allImgs = document.querySelectorAll<HTMLImageElement>("img")
+  const gifCandidates = [...allImgs].filter(img =>
+    img.src.includes("/emg1/") || img.src.includes("giphy.com")
+  )
+  console.log("[scraper] total imgs on page:", allImgs.length, "| gif candidates (emg1/giphy):", gifCandidates.length)
+  gifCandidates.forEach((img, i) => console.log(`  [gif-candidate ${i}] src:`, img.src.slice(0, 120)))
 
   for (const usernameSpan of usernameSpans) {
     if (results.length >= limit) break
@@ -94,9 +106,23 @@ function scrapeComments(limit: number): RawComment[] {
     if (seen.has(dedupKey)) continue
     seen.add(dedupKey)
 
-    const text = extractText(root, username)
+    // Log every img inside this comment root for debugging
+    const rootImgs = root.querySelectorAll<HTMLImageElement>("img")
+    if (rootImgs.length > 0) {
+      console.log(`[scraper] @${username} root has ${rootImgs.length} img(s):`)
+      rootImgs.forEach((img, i) =>
+        console.log(`  img[${i}] alt="${img.alt}" src=${img.src.slice(0, 120)}`)
+      )
+    }
+
+    const gifUrl = extractGifUrl(root) ?? undefined
+    let text = extractText(root, username)
+
+    console.log(`[scraper] @${username} | text="${text}" | gifUrl=${gifUrl ? gifUrl.slice(0, 80) : "none"}`)
+
+    if (!text && gifUrl) text = "[GIF]"         // GIF-only comment
     if (!text || text === username) continue
-    if (isSpam(text)) continue
+    if (!gifUrl && isSpam(text)) continue        // spam-filter text, but never GIFs
 
     const likesCount = extractLikes(root)
     const isReply = text.startsWith("@") || !!root.querySelector("span._aacu a._a6hd")
@@ -107,9 +133,11 @@ function scrapeComments(limit: number): RawComment[] {
       text,
       likesCount,
       isReply,
+      gifUrl,
     } as RawComment & { isReply: boolean })
   }
 
+  console.log("[scraper] final results:", results.length, "| gif comments:", results.filter(r => r.gifUrl).length)
   return results
 }
 
@@ -130,7 +158,7 @@ function findCommentRoot(el: HTMLElement): HTMLElement | null {
     // Bail if we've moved into a container with multiple comments
     if (uCount > 1) break
 
-    if (uCount === 1 && cur.querySelector("time[datetime]") && hasCommentText(cur)) {
+    if (uCount === 1 && cur.querySelector("time[datetime]") && hasCommentContent(cur)) {
       return cur
     }
     cur = cur.parentElement
@@ -162,6 +190,49 @@ function hasCommentText(el: HTMLElement): boolean {
   }
 
   return false
+}
+
+/**
+ * Look for a GIF image inside a comment root.
+ * Instagram proxies Giphy GIFs through fbcdn.net/emg1/; we extract the
+ * original Giphy URL from the `url=` query-string parameter for longevity.
+ */
+function extractGifUrl(root: HTMLElement): string | null {
+  for (const img of root.querySelectorAll<HTMLImageElement>("img")) {
+    const alt = (img.alt ?? "").toLowerCase()
+    if (alt.includes("profile picture")) continue
+
+    const src = img.getAttribute("src") ?? img.src ?? ""
+    if (!src) continue
+
+    console.log("[extractGifUrl] checking img src:", src.slice(0, 100))
+
+    // Instagram embedded-media gateway (CDN proxy for Giphy)
+    if (src.includes("/emg1/")) {
+      try {
+        const proxied = new URL(src).searchParams.get("url")
+        if (proxied) {
+          const decoded = decodeURIComponent(proxied)
+          console.log("[extractGifUrl] ✓ found emg1 gif →", decoded.slice(0, 80))
+          return decoded
+        }
+      } catch (e) { console.warn("[extractGifUrl] URL parse failed:", e) }
+      console.log("[extractGifUrl] ✓ returning raw emg1 src")
+      return src
+    }
+
+    // Direct Giphy URL
+    if (src.includes("giphy.com")) {
+      console.log("[extractGifUrl] ✓ direct giphy url")
+      return src
+    }
+  }
+  return null
+}
+
+/** Returns true if a comment root has text content OR a GIF image. */
+function hasCommentContent(el: HTMLElement): boolean {
+  return hasCommentText(el) || extractGifUrl(el) !== null
 }
 
 /**
@@ -204,10 +275,15 @@ function extractLikes(root: HTMLElement): string {
     return raw.replace(/\s*likes?\s*/i, "").trim()
   }
 
-  for (const btn of root.querySelectorAll<HTMLElement>("[role='button']")) {
-    const t = btn.textContent?.trim() ?? ""
-    const m = t.match(/^([\d,]+)\s+likes?$/i)
-    if (m) return m[1]
+  // Collapse all internal whitespace then match "N likes" / "1.2K likes" / "1.2M likes"
+  for (const el of root.querySelectorAll<HTMLElement>("[role='button'], span")) {
+    const t = (el.textContent ?? "").replace(/\s+/g, " ").trim()
+    const m = t.match(/^([\d,.]+[KkMm]?)\s+likes?$/i)
+    if (!m) continue
+    const raw = m[1]
+    if (/[Kk]$/.test(raw)) return String(Math.round(parseFloat(raw) * 1_000))
+    if (/[Mm]$/.test(raw)) return String(Math.round(parseFloat(raw) * 1_000_000))
+    return raw.replace(/,/g, "")
   }
 
   return ""

@@ -24,6 +24,7 @@ interface Props {
 }
 
 const MODES: { mode: RankingMode; label: string }[] = [
+  { mode: "scrape",  label: "📋 List" },
   { mode: "default", label: "Normal" },
   { mode: "savage",  label: "☠ Savage" },
   { mode: "indian",  label: "🇮🇳 Desi" },

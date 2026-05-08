@@ -2,7 +2,7 @@ import { useRef, useState } from "react"
 import type { Tier } from "../../shared/messages"
 
 const TIER_COLORS: Record<Tier, string> = {
-  S: "#FF6B35", A: "#39FF14", B: "#00B4FF", C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a",
+  S: "#FF6B35", A: "#39FF14", B: "#00B4FF", C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a", GIF: "#FFD700",
 }
 
 // Worst-to-best — matches video reveal order

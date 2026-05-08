@@ -18,7 +18,7 @@ export function CommentCard({ comment, tierColor, index, isDragging = false, del
 
   function handleCopy(e: React.MouseEvent) {
     e.stopPropagation()
-    navigator.clipboard.writeText(comment.text).then(() => {
+    navigator.clipboard.writeText(comment.gifUrl ?? comment.text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })
@@ -67,10 +67,35 @@ export function CommentCard({ comment, tierColor, index, isDragging = false, del
         )}
       </div>
 
-      {/* Comment text */}
-      <p className="font-mono text-[12.5px] text-[#d0d0d0] leading-[1.55] break-words">
-        {comment.text}
-      </p>
+      {/* GIF image or comment text */}
+      {comment.gifUrl ? (
+        <img
+          src={comment.gifUrl}
+          alt="GIF"
+          className="rounded-sm mt-1 max-w-full"
+          style={{ maxHeight: 180, objectFit: "contain", display: "block" }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+        />
+      ) : (
+        <p className="font-mono text-[12.5px] text-[#d0d0d0] leading-[1.55] break-words">
+          {comment.text}
+        </p>
+      )}
+
+      {/* Quick draft button — always visible for non-draft sections */}
+      {deleteTitle !== "Delete permanently" && !comment.locked && (
+        <div className="flex justify-end mt-1.5">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onDelete(comment.id) }}
+            title="Move to Draft"
+            className="font-mono text-[9px] text-[#2a2a2a] hover:text-[#888] transition-colors px-1 py-0.5 rounded hover:bg-[#222]"
+          >
+            → draft
+          </button>
+        </div>
+      )}
 
       {/* Hover actions */}
       <div className="absolute right-1.5 top-1.5 hidden group-hover:flex gap-0.5">

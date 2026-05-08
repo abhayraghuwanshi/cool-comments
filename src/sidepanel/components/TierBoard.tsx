@@ -5,26 +5,30 @@ import {
   type DragStartEvent, type DragEndEvent,
 } from "@dnd-kit/core"
 import { arrayMove } from "@dnd-kit/sortable"
-import type { RankedComment, Tier } from "../../shared/messages"
+import type { RankedComment, RankingMode, Tier } from "../../shared/messages"
 import { TierRow } from "./TierRow"
 import { CommentCard } from "./CommentCard"
+import { exportGif } from "../lib/exportGif"
 
 const RANKED_TIERS: Tier[] = ["S", "A", "B", "C", "D", "F"]
-const ALL_TIERS: Tier[] = [...RANKED_TIERS, "DRAFT"]
+const ALL_TIERS: Tier[] = [...RANKED_TIERS, "DRAFT", "GIF"]
 
 const TIER_COLOR: Record<Tier, string> = {
   S: '#FF6B35', A: '#39FF14', B: '#00B4FF',
   C: '#CC44FF', D: '#FFB300', F: '#FF1744',
-  DRAFT: '#4a4a4a',
+  DRAFT: '#4a4a4a', GIF: '#FFD700',
 }
 
 interface Props {
   comments: RankedComment[]
   onCommentsChange: (comments: RankedComment[]) => void
+  rankingMode?: RankingMode
 }
 
-export function TierBoard({ comments, onCommentsChange }: Props) {
+export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [isExportingGif, setIsExportingGif] = useState(false)
+  const isListMode = rankingMode === "scrape"
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -46,6 +50,31 @@ export function TierBoard({ comments, onCommentsChange }: Props) {
     const isTierLabel = (ALL_TIERS as string[]).includes(overId)
     const dragged = comments.find((c) => c.id === draggedId)
     if (!dragged || dragged.locked) return
+
+    // List mode: flat group for all non-DRAFT/non-GIF, keyed to "A"
+    if (isListMode) {
+      const isSpecial = (t: Tier) => t === "DRAFT" || t === "GIF"
+      if (isTierLabel) {
+        const target = overId as Tier
+        onCommentsChange(comments.map((c) => c.id === draggedId
+          ? { ...c, tier: isSpecial(target) ? target : "A" as Tier }
+          : c))
+      } else {
+        const overComment = comments.find((c) => c.id === overId)
+        if (!overComment) return
+        if (isSpecial(overComment.tier)) {
+          onCommentsChange(comments.map((c) => c.id === draggedId ? { ...c, tier: overComment.tier } : c))
+        } else {
+          const listItems = comments.filter((c) => !isSpecial(c.tier))
+          const specials = comments.filter((c) => isSpecial(c.tier))
+          const oldIndex = listItems.findIndex((c) => c.id === draggedId)
+          const newIndex = listItems.findIndex((c) => c.id === overId)
+          if (oldIndex === newIndex) return
+          onCommentsChange([...arrayMove(listItems, oldIndex, newIndex), ...specials])
+        }
+      }
+      return
+    }
 
     if (isTierLabel) {
       onCommentsChange(
@@ -89,13 +118,15 @@ export function TierBoard({ comments, onCommentsChange }: Props) {
 
   // Global offsets for stagger animation
   let offset = 0
-  const tierOffsets: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0, F: 0, DRAFT: 0 }
+  const tierOffsets: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0, F: 0, DRAFT: 0, GIF: 0 }
   for (const tier of ALL_TIERS) {
     tierOffsets[tier] = offset
     offset += comments.filter((c) => c.tier === tier).length
   }
 
   const draftComments = comments.filter((c) => c.tier === "DRAFT")
+  const gifComments = comments.filter((c) => c.tier === "GIF")
+  const listComments = comments.filter((c) => c.tier !== "DRAFT" && c.tier !== "GIF")
 
   return (
     <DndContext
@@ -105,17 +136,30 @@ export function TierBoard({ comments, onCommentsChange }: Props) {
       onDragEnd={handleDragEnd}
     >
       <div className="flex flex-col pb-6">
-        {RANKED_TIERS.map((tier) => (
+        {isListMode ? (
           <TierRow
-            key={tier}
-            tier={tier}
-            comments={comments.filter((c) => c.tier === tier)}
-            globalOffset={tierOffsets[tier]}
+            key="list"
+            tier="A"
+            comments={listComments}
+            globalOffset={0}
+            customLabel="COMMENTS"
             deleteTitle="Move to Draft"
             onLock={handleLock}
             onDelete={handleArchive}
           />
-        ))}
+        ) : (
+          RANKED_TIERS.map((tier) => (
+            <TierRow
+              key={tier}
+              tier={tier}
+              comments={comments.filter((c) => c.tier === tier)}
+              globalOffset={tierOffsets[tier]}
+              deleteTitle="Move to Draft"
+              onLock={handleLock}
+              onDelete={handleArchive}
+            />
+          ))
+        )}
 
         {/* Draft section divider */}
         <div className="mx-3 mt-4 mb-0 flex items-center gap-2">
@@ -130,6 +174,57 @@ export function TierBoard({ comments, onCommentsChange }: Props) {
           deleteTitle="Delete permanently"
           onLock={handleLock}
           onDelete={handleDelete}
+        />
+
+        {/* GIF section divider */}
+        <div className="mx-3 mt-4 mb-0 flex items-center gap-2">
+          <div className="flex-1 h-px bg-[#222]" />
+        </div>
+
+        {/* GIF section header with download button */}
+        <div className="flex items-center gap-2 px-3 pt-3 pb-1">
+          <span className="font-mono text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: '#FFD700' }}>
+            ✦ GIF
+          </span>
+          <div className="flex-1 flex items-center gap-2 overflow-hidden">
+            <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, #FFD70060, transparent)' }} />
+            <span className="font-mono text-[10px] text-[#555] shrink-0 tabular-nums">
+              {gifComments.length > 0 ? gifComments.length : '—'}
+            </span>
+          </div>
+          <button
+            onClick={async () => {
+              if (isExportingGif || gifComments.length === 0) return
+              setIsExportingGif(true)
+              await exportGif(gifComments).catch((err) => {
+                console.error("[GIF export error]", err)
+                alert("GIF export failed: " + String(err))
+              })
+              setIsExportingGif(false)
+            }}
+            disabled={isExportingGif || gifComments.length === 0}
+            title={gifComments.length === 0 ? "Drag comments here to include in GIF" : "Download animated GIF"}
+            className={`font-ui text-[10px] font-semibold px-2 py-0.5 rounded transition-all flex items-center gap-1 disabled:opacity-40 ${
+              isExportingGif
+                ? "text-[#FFD700] bg-[#1a1a1a] cursor-wait"
+                : gifComments.length === 0
+                ? "text-[#333]"
+                : "text-[#FFD700] bg-[#FFD700]/10 hover:bg-[#FFD700]/20"
+            }`}
+          >
+            {isExportingGif
+              ? <><span className="inline-block w-2 h-2 rounded-full border-2 border-[#FFD700]/25 border-t-[#FFD700] animate-spin" />encoding</>
+              : "↓ Download GIF"}
+          </button>
+        </div>
+
+        <TierRow
+          tier="GIF"
+          comments={gifComments}
+          globalOffset={tierOffsets["GIF"]}
+          deleteTitle="Move to Draft"
+          onLock={handleLock}
+          onDelete={handleArchive}
         />
       </div>
 

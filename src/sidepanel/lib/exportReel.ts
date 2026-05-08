@@ -7,7 +7,7 @@ const FPS = 30
 const TIERS_ORDER: Tier[] = ["F", "D", "C", "B", "A", "S"]
 const TIER_COLOR: Record<Tier, string> = {
   S: "#FF6B35", A: "#39FF14", B: "#00B4FF",
-  C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a",
+  C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a", GIF: "#FFD700",
 }
 
 const INTRO_DUR   = 3.0
@@ -267,7 +267,7 @@ function loadImg(src: string): Promise<HTMLImageElement | null> {
 export async function exportReelVideo(reelData: ReelData, comments: RankedComment[]): Promise<void> {
   await document.fonts.ready
 
-  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [] }
+  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [], GIF: [] }
   for (const c of comments) {
     const tier = (c.tier?.toUpperCase() ?? "") as Tier
     if (tier in byTier) byTier[tier].push(c)
@@ -372,15 +372,66 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
 
 const GREEN_SCREEN = "#00FF00"  // chroma key color — remove in CapCut with Chroma Key tool
 
-// Green-screen overlay export — use in CapCut: Overlay → Chroma Key → pick green → done.
+// ── Batch scene: renders up to 3 comment cards at once ───────────────────────
+const BATCH_SIZE    = 3
+const BATCH_SLIDE   = 0.45  // seconds for all cards to slide in
+const BATCH_HOLD    = 2.8   // seconds cards stay on screen
+const BATCH_DUR     = BATCH_SLIDE + BATCH_HOLD
+
+function drawBatchScene(
+  ctx: CanvasRenderingContext2D,
+  batch: RankedComment[],
+  batchT: number            // elapsed time within this batch (0 → BATCH_DUR)
+) {
+  ctx.clearRect(0, 0, W, H)
+  ctx.fillStyle = GREEN_SCREEN
+  ctx.fillRect(0, 0, W, H)
+
+  const PAD    = 60
+  const CARD_W = W - PAD * 2
+
+  // Measure all card heights first so we can center the group vertically
+  const heights = batch.map((c) => {
+    const innerW = CARD_W - 8 - CARD_PAD_X * 2
+    ctx.font = `bold ${U_SIZE}px "Courier New", monospace`
+    const uH = wrapText(ctx, `@${c.username}`, innerW).length * U_LINE
+    ctx.font = `${T_SIZE}px "Courier New", monospace`
+    const tH = wrapText(ctx, c.text, innerW).length * T_LINE
+    return CARD_PAD_Y + uH + 10 + tH + CARD_PAD_Y
+  })
+
+  const GAP        = 28
+  const totalH     = heights.reduce((a, b) => a + b, 0) + GAP * (batch.length - 1)
+  let   y          = Math.round((H - totalH) / 2)
+
+  for (let i = 0; i < batch.length; i++) {
+    // Stagger: each card starts sliding 80 ms after the previous
+    const slideStart = i * (BATCH_SLIDE / (batch.length + 1))
+    const progress   = Math.min(Math.max((batchT - slideStart) / (BATCH_SLIDE * 0.7), 0), 1)
+    const color      = TIER_COLOR[batch[i].tier] ?? "#888"
+    const h          = drawCard(ctx, batch[i], PAD, y, CARD_W, color, progress)
+    y += h + GAP
+  }
+}
+
+// Green-screen overlay export — shows 3 comments at a time.
+// Use in CapCut: Overlay → Chroma Key → pick green → done.
 export async function exportOverlayVideo(comments: RankedComment[]): Promise<void> {
   await document.fonts.ready
 
-  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [] }
-  for (const c of comments) {
-    const tier = (c.tier?.toUpperCase() ?? "") as Tier
-    if (tier in byTier) byTier[tier].push(c)
+  // Only show ranked comments (skip DRAFT and GIF)
+  const displayComments = comments.filter(
+    (c) => c.tier !== "DRAFT" && c.tier !== "GIF"
+  )
+  if (displayComments.length === 0) return
+
+  // Split into batches of 3
+  const batches: RankedComment[][] = []
+  for (let i = 0; i < displayComments.length; i += BATCH_SIZE) {
+    batches.push(displayComments.slice(i, i + BATCH_SIZE))
   }
+
+  const totalDur = batches.length * BATCH_DUR
 
   const canvas = document.createElement("canvas")
   canvas.width = W; canvas.height = H
@@ -400,19 +451,6 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
   const chunks: Blob[] = []
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
 
-  function tierDur(tier: Tier) {
-    const n = byTier[tier].length
-    return LABEL_DUR + (n === 0 ? EMPTY_DUR : n * COMMENT_DUR)
-  }
-
-  const tierStarts: number[] = []
-  let cursor = 0
-  for (const tier of TIERS_ORDER) {
-    tierStarts.push(cursor)
-    cursor += tierDur(tier)
-  }
-  const totalDur = cursor
-
   await new Promise<void>((resolve) => {
     recorder.onstop = () => {
       const blob = new Blob(chunks, { type: mimeType })
@@ -430,36 +468,15 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
 
     const timerId = setInterval(() => {
       const t = (Date.now() - startTime) / 1000
-
       if (t >= totalDur) {
         clearInterval(timerId)
         ctx.clearRect(0, 0, W, H)
         setTimeout(() => recorder.stop(), 300)
         return
       }
-
-      let ti = TIERS_ORDER.length - 1
-      for (let i = 0; i < TIERS_ORDER.length - 1; i++) {
-        if (t < tierStarts[i + 1]) { ti = i; break }
-      }
-      const tier = TIERS_ORDER[ti]
-      const te = t - tierStarts[ti]
-      const tierComments = byTier[tier]
-
-      let labelProgress: number, visibleCount: number, currentSlide: number
-      if (te < LABEL_DUR) {
-        labelProgress = te / LABEL_DUR; visibleCount = 0; currentSlide = 0
-      } else {
-        labelProgress = 1
-        const ce = te - LABEL_DUR
-        const ci = Math.floor(ce / COMMENT_DUR)
-        visibleCount = Math.min(ci, tierComments.length)
-        currentSlide = ci < tierComments.length
-          ? Math.min((ce - ci * COMMENT_DUR) / SLIDE_DUR, 1)
-          : 0
-      }
-
-      drawTierScene(ctx, tier, tierComments, labelProgress, visibleCount, currentSlide, true)
+      const batchIdx = Math.min(Math.floor(t / BATCH_DUR), batches.length - 1)
+      const batchT   = t - batchIdx * BATCH_DUR
+      drawBatchScene(ctx, batches[batchIdx], batchT)
     }, 1000 / FPS)
   })
 }

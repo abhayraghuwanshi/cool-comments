@@ -19,6 +19,7 @@ const TIER_INTROS: Record<Tier, string> = {
   A: "A tier. Now we're talking.",
   S: "S tier. The best comments on this reel. Let's GO.",
   DRAFT: "",
+  GIF: "",
 }
 
 const TIER_REACTIONS: Record<Tier, string[]> = {
@@ -29,6 +30,7 @@ const TIER_REACTIONS: Record<Tier, string[]> = {
   A: ["Okay that's good.", "Fair enough.", "That's clever.", "Nice one.", "Actually got me."],
   S: ["BRO.", "No way.", "That's ELITE.", "Genuinely insane.", "okay okay okay."],
   DRAFT: [],
+  GIF: [],
 }
 
 const EMOJI_MAP: [RegExp, string][] = [

@@ -119,16 +119,30 @@ export default function App() {
       return
     }
 
-    // Pause here — show the context prompt before ranking
+    // Show context prompt for all modes (likes filter is useful even without AI)
     setPendingScrape({ reel: scrapeResult.reel, comments: scrapeResult.comments })
     setPhase("awaiting-context")
-  }, [scrape, rankingMode, ttsAudio])
+  }, [scrape, ttsAudio])
 
-  const handleContextSubmit = useCallback(async (reelContext: string) => {
+  const handleContextSubmit = useCallback(async (reelContext: string, minLikes = 0) => {
     if (!pendingScrape) return
     setPhase("ranking")
 
-    const rankResult = await rank(pendingScrape.reel, pendingScrape.comments, rankingMode, reelContext || undefined)
+    const parseLikes = (s: string) => parseInt((s ?? "").replace(/[^0-9]/g, ""), 10) || 0
+    const filtered = minLikes > 0
+      ? pendingScrape.comments.filter((c) => {
+          if (!c.likesCount) return true // likes unknown — keep
+          return parseLikes(c.likesCount) >= minLikes
+        })
+      : pendingScrape.comments
+
+    if (filtered.length === 0) {
+      setPhase("error")
+      setErrorMsg(`No comments with ≥ ${minLikes.toLocaleString()} likes found. Lower the filter and try again.`)
+      return
+    }
+
+    const rankResult = await rank(pendingScrape.reel, filtered, rankingMode, reelContext || undefined)
     if ("error" in rankResult) {
       if (rankResult.error === "NO_API_KEY") {
         setShowSettings(true)
@@ -255,7 +269,9 @@ export default function App() {
   if (phase === "awaiting-context") return (
     <ContextPrompt
       onSubmit={handleContextSubmit}
-      onSkip={() => handleContextSubmit("")}
+      onSkip={() => handleContextSubmit("", 0)}
+      onBack={() => { setPendingScrape(null); setPhase("idle") }}
+      isListMode={rankingMode === "scrape"}
     />
   )
 
@@ -417,7 +433,7 @@ export default function App() {
 
       {/* Tier board — full width */}
       <div id="tier-board-export-root" className="flex-1 overflow-y-auto">
-        <TierBoard comments={comments} onCommentsChange={setComments} />
+        <TierBoard comments={comments} onCommentsChange={setComments} rankingMode={rankingMode} />
       </div>
 
       {showAddModal && (
