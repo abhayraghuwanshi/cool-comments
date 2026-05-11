@@ -3,6 +3,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import type { RankedComment, Tier } from "../../shared/messages"
 import { CommentCard } from "./CommentCard"
 
+
 const TIER_COLOR: Record<Tier, string> = {
   S: '#FF6B35',
   A: '#39FF14',
@@ -21,16 +22,19 @@ interface Props {
   isDraft?: boolean
   customLabel?: string
   deleteTitle?: string
+  isListMode?: boolean
   onLock: (id: string) => void
   onDelete: (id: string) => void
+  onMoveTo?: (id: string, tier: Tier) => void
 }
 
-export function TierRow({ tier, comments, globalOffset, isDraft, customLabel, deleteTitle, onLock, onDelete }: Props) {
+export function TierRow({ tier, comments, globalOffset, isDraft, customLabel, deleteTitle, isListMode, onLock, onDelete, onMoveTo }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: tier })
   const color = TIER_COLOR[tier]
 
   return (
     <div
+      ref={setNodeRef}
       className="border-b border-[#1a1a1a] transition-colors duration-150"
       style={{ background: isOver ? `${color}08` : 'transparent' }}
     >
@@ -91,7 +95,7 @@ export function TierRow({ tier, comments, globalOffset, isDraft, customLabel, de
       )}
 
       {/* Comments */}
-      <div ref={setNodeRef} className="px-3 pb-2.5 flex flex-col gap-1.5" style={{ minHeight: 36 }}>
+      <div className="px-3 pb-2.5 flex flex-col gap-1.5" style={{ minHeight: 36 }}>
         <SortableContext items={comments.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {comments.map((comment, i) => (
             <CommentCard
@@ -100,8 +104,10 @@ export function TierRow({ tier, comments, globalOffset, isDraft, customLabel, de
               tierColor={color}
               index={globalOffset + i}
               deleteTitle={deleteTitle}
+              isListMode={isListMode}
               onLock={onLock}
               onDelete={onDelete}
+              onMoveTo={onMoveTo}
             />
           ))}
         </SortableContext>

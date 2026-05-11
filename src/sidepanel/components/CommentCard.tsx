@@ -1,7 +1,23 @@
 import { useState } from "react"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import type { RankedComment } from "../../shared/messages"
+import type { RankedComment, Tier } from "../../shared/messages"
+
+const TIER_COLOR: Record<Tier, string> = {
+  S: '#FF6B35', A: '#39FF14', B: '#00B4FF',
+  C: '#CC44FF', D: '#FFB300', F: '#FF1744',
+  DRAFT: '#4a4a4a', GIF: '#FFD700',
+}
+const ALL_MOVE_TIERS: Tier[] = ["S", "A", "B", "C", "D", "F", "GIF", "DRAFT"]
+const LIST_MOVE_TIERS: Tier[] = ["A", "GIF", "DRAFT"]
+
+// Label shown on the tier button in the picker
+function tierLabel(t: Tier, isListMode: boolean) {
+  if (t === "DRAFT") return "↓ draft"
+  if (t === "GIF")   return "gif"
+  if (t === "A" && isListMode) return "list"
+  return t
+}
 
 interface Props {
   comment: RankedComment
@@ -9,12 +25,15 @@ interface Props {
   index: number
   isDragging?: boolean
   deleteTitle?: string
+  isListMode?: boolean
   onLock: (id: string) => void
   onDelete: (id: string) => void
+  onMoveTo?: (id: string, tier: Tier) => void
 }
 
-export function CommentCard({ comment, tierColor, index, isDragging = false, deleteTitle = "Move to Draft", onLock, onDelete }: Props) {
+export function CommentCard({ comment, tierColor, index, isDragging = false, deleteTitle = "Move to Draft", isListMode = false, onLock, onDelete, onMoveTo }: Props) {
   const [copied, setCopied] = useState(false)
+  const [showMover, setShowMover] = useState(false)
 
   function handleCopy(e: React.MouseEvent) {
     e.stopPropagation()
@@ -69,31 +88,64 @@ export function CommentCard({ comment, tierColor, index, isDragging = false, del
 
       {/* GIF image or comment text */}
       {comment.gifUrl ? (
-        <img
-          src={comment.gifUrl}
-          alt="GIF"
-          className="rounded-sm mt-1 max-w-full"
-          style={{ maxHeight: 180, objectFit: "contain", display: "block" }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
-        />
+        /\.(mp4|webm|mov)(\?|#|$)/i.test(comment.gifUrl) ? (
+          <video
+            src={comment.gifUrl}
+            autoPlay loop muted playsInline
+            className="rounded-sm mt-1 max-w-full"
+            style={{ maxHeight: 180, objectFit: "contain", display: "block" }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onError={(e) => { (e.target as HTMLVideoElement).style.display = "none" }}
+          />
+        ) : (
+          <img
+            src={comment.gifUrl}
+            alt="GIF"
+            className="rounded-sm mt-1 max-w-full"
+            style={{ maxHeight: 180, objectFit: "contain", display: "block" }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+          />
+        )
       ) : (
         <p className="font-mono text-[12.5px] text-[#d0d0d0] leading-[1.55] break-words">
           {comment.text}
         </p>
       )}
 
-      {/* Quick draft button — always visible for non-draft sections */}
-      {deleteTitle !== "Delete permanently" && !comment.locked && (
-        <div className="flex justify-end mt-1.5">
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onDelete(comment.id) }}
-            title="Move to Draft"
-            className="font-mono text-[9px] text-[#2a2a2a] hover:text-[#888] transition-colors px-1 py-0.5 rounded hover:bg-[#222]"
-          >
-            → draft
-          </button>
+      {/* Bottom actions row — single move button */}
+      {!comment.locked && onMoveTo && (
+        <div className="flex items-center justify-end gap-1 mt-1.5" onPointerDown={(e) => e.stopPropagation()}>
+          {showMover ? (
+            <>
+              {(isListMode ? LIST_MOVE_TIERS : ALL_MOVE_TIERS)
+                .filter(t => t !== comment.tier)
+                .map(t => (
+                  <button
+                    key={t}
+                    onClick={(e) => { e.stopPropagation(); onMoveTo(comment.id, t); setShowMover(false) }}
+                    className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors hover:opacity-80"
+                    style={{ color: TIER_COLOR[t], background: `${TIER_COLOR[t]}18`, border: `1px solid ${TIER_COLOR[t]}40` }}
+                  >
+                    {tierLabel(t, isListMode)}
+                  </button>
+                ))}
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMover(false) }}
+                className="font-mono text-[9px] text-[#444] hover:text-[#888] px-1 py-0.5 rounded transition-colors"
+              >
+                ✕
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowMover(true) }}
+              title="Move to section"
+              className="font-mono text-[9px] text-[#555] hover:text-[#aaa] transition-colors px-1 py-0.5 rounded hover:bg-[#222]"
+            >
+              → move
+            </button>
+          )}
         </div>
       )}
 

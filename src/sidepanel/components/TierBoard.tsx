@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import {
-  DndContext, DragOverlay, closestCenter,
+  DndContext, DragOverlay, closestCorners,
   PointerSensor, useSensor, useSensors,
-  type DragStartEvent, type DragEndEvent,
+  MeasuringStrategy,
+  type DragStartEvent, type DragEndEvent, type DragMoveEvent,
 } from "@dnd-kit/core"
 import { arrayMove } from "@dnd-kit/sortable"
 import type { RankedComment, RankingMode, Tier } from "../../shared/messages"
@@ -40,10 +41,41 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
     setActiveId(event.active.id as string)
   }
 
+  const pointerYRef = useRef(0)
+  const scrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    const track = (e: PointerEvent) => { pointerYRef.current = e.clientY }
+    window.addEventListener("pointermove", track)
+    return () => window.removeEventListener("pointermove", track)
+  }, [])
+
+  function stopScroll() {
+    if (scrollTimerRef.current) { clearInterval(scrollTimerRef.current); scrollTimerRef.current = null }
+  }
+
+  function handleDragMove(_event: DragMoveEvent) {
+    const container = document.getElementById("tier-board-export-root")
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const py = pointerYRef.current
+    const EDGE = 80, SPEED = 14
+    if (py < rect.top + EDGE) {
+      if (!scrollTimerRef.current)
+        scrollTimerRef.current = setInterval(() => { container.scrollTop -= SPEED }, 16)
+    } else if (py > rect.bottom - EDGE) {
+      if (!scrollTimerRef.current)
+        scrollTimerRef.current = setInterval(() => { container.scrollTop += SPEED }, 16)
+    } else {
+      stopScroll()
+    }
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    stopScroll()
     const { active, over } = event
     setActiveId(null)
-    if (!over) return
+if (!over) return
 
     const draggedId = active.id as string
     const overId = over.id as string
@@ -105,6 +137,9 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
     }
   }
 
+  const handleMoveTo = (id: string, tier: Tier) =>
+    onCommentsChange(comments.map((c) => (c.id === id ? { ...c, tier, locked: false } : c)))
+
   const handleLock = (id: string) =>
     onCommentsChange(comments.map((c) => (c.id === id ? { ...c, locked: !c.locked } : c)))
 
@@ -131,8 +166,11 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={closestCorners}
+      autoScroll={false}
+      measuring={{ droppable: { strategy: MeasuringStrategy.WhileDragging } }}
       onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
     >
       <div className="flex flex-col pb-6">
@@ -144,8 +182,10 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
             globalOffset={0}
             customLabel="COMMENTS"
             deleteTitle="Move to Draft"
+            isListMode
             onLock={handleLock}
             onDelete={handleArchive}
+            onMoveTo={handleMoveTo}
           />
         ) : (
           RANKED_TIERS.map((tier) => (
@@ -157,6 +197,7 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
               deleteTitle="Move to Draft"
               onLock={handleLock}
               onDelete={handleArchive}
+              onMoveTo={handleMoveTo}
             />
           ))
         )}
@@ -172,8 +213,10 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
           globalOffset={tierOffsets["DRAFT"]}
           isDraft
           deleteTitle="Delete permanently"
+          isListMode={isListMode}
           onLock={handleLock}
           onDelete={handleDelete}
+          onMoveTo={handleMoveTo}
         />
 
         {/* GIF section divider */}
@@ -223,8 +266,10 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
           comments={gifComments}
           globalOffset={tierOffsets["GIF"]}
           deleteTitle="Move to Draft"
+          isListMode={isListMode}
           onLock={handleLock}
           onDelete={handleArchive}
+          onMoveTo={handleMoveTo}
         />
       </div>
 

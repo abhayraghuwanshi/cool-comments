@@ -54,19 +54,41 @@ const T_SIZE     = 40   // comment text font size
 const T_LINE     = 56   // comment text line height
 const L_SIZE     = 28   // likes font size
 
+type GifMedia = HTMLImageElement | HTMLVideoElement
+
+function isVideoUrl(url: string) { return /\.(mp4|webm|mov)(\?|#|$)/i.test(url) }
+
+function mediaDims(m: GifMedia): { nw: number; nh: number } {
+  if (m instanceof HTMLVideoElement) return { nw: m.videoWidth || 200, nh: m.videoHeight || 200 }
+  return { nw: m.naturalWidth || 200, nh: m.naturalHeight || 200 }
+}
+
+function gifContentHeight(innerW: number, m: GifMedia): number {
+  const { nw, nh } = mediaDims(m)
+  return Math.round(nh * Math.min(innerW / nw, 320 / nh))
+}
+
 function drawCard(
   ctx: CanvasRenderingContext2D,
   comment: RankedComment,
   x: number, y: number, w: number,
   color: string,
-  slideProgress: number
+  slideProgress: number,
+  gifImgs?: Map<string, GifMedia>
 ): number {
   const innerW = w - 8 - CARD_PAD_X * 2
   ctx.font = `bold ${U_SIZE}px "Courier New", monospace`
   const uLines = wrapText(ctx, `@${comment.username}`, innerW)
+
+  const gifMedia = comment.gifUrl ? gifImgs?.get(comment.gifUrl) : undefined
+  const hasGif = !!gifMedia && (
+    gifMedia instanceof HTMLVideoElement ? gifMedia.videoWidth > 0 : (gifMedia as HTMLImageElement).naturalWidth > 0
+  )
+
   ctx.font = `${T_SIZE}px "Courier New", monospace`
-  const tLines = wrapText(ctx, comment.text, innerW)
-  const h = CARD_PAD_Y + uLines.length * U_LINE + 10 + tLines.length * T_LINE + CARD_PAD_Y
+  const tLines = hasGif ? [] : wrapText(ctx, comment.text, innerW)
+  const contentH = hasGif ? gifContentHeight(innerW, gifMedia!) : tLines.length * T_LINE
+  const h = CARD_PAD_Y + uLines.length * U_LINE + 10 + contentH + CARD_PAD_Y
 
   const ox = (1 - easeOut(slideProgress)) * -(W + w)
   ctx.save()
@@ -88,9 +110,17 @@ function drawCard(
   for (const line of uLines) { ctx.fillText(line, tx, cy); cy += U_LINE }
   cy += 10
 
-  ctx.font = `${T_SIZE}px "Courier New", monospace`
-  ctx.fillStyle = "#e0e0e0"
-  for (const line of tLines) { ctx.fillText(line, tx, cy); cy += T_LINE }
+  if (hasGif) {
+    const { nw, nh } = mediaDims(gifMedia!)
+    const scale = Math.min(innerW / nw, 320 / nh)
+    const dw = Math.round(nw * scale), dh = Math.round(nh * scale)
+    ctx.drawImage(gifMedia! as CanvasImageSource, tx + Math.round((innerW - dw) / 2), cy, dw, dh)
+  } else {
+    const isGifOnly = comment.gifUrl && comment.text === "[GIF]"
+    ctx.font = isGifOnly ? `italic ${T_SIZE}px "Courier New", monospace` : `${T_SIZE}px "Courier New", monospace`
+    ctx.fillStyle = isGifOnly ? "#FFD700" : "#e0e0e0"
+    for (const line of tLines) { ctx.fillText(line, tx, cy); cy += T_LINE }
+  }
 
   if (comment.likesCount && comment.likesCount !== "0") {
     ctx.font = `${L_SIZE}px "Courier New", monospace`
@@ -183,7 +213,8 @@ function drawTierScene(
   labelProgress: number,
   visibleCount: number,
   currentSlide: number,
-  overlay = false
+  overlay = false,
+  gifImgs?: Map<string, GifMedia>
 ) {
   const color = TIER_COLOR[tier]
 
@@ -224,11 +255,11 @@ function drawTierScene(
   let y = 400
 
   for (let i = 0; i < visibleCount; i++) {
-    const h = drawCard(ctx, tierComments[i], PAD, y, CARD_W, color, 1)
+    const h = drawCard(ctx, tierComments[i], PAD, y, CARD_W, color, 1, gifImgs)
     y += h + 14
   }
   if (visibleCount < tierComments.length && currentSlide > 0) {
-    drawCard(ctx, tierComments[visibleCount], PAD, y, CARD_W, color, currentSlide)
+    drawCard(ctx, tierComments[visibleCount], PAD, y, CARD_W, color, currentSlide, gifImgs)
   }
   if (tierComments.length === 0 && labelProgress >= 1) {
     ctx.font = '44px "Courier New", monospace'
@@ -264,6 +295,89 @@ function loadImg(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
+// Extension pages share host_permissions — fetch directly from the sidepanel.
+// Returns a same-origin blob URL that never taints the canvas.
+async function fetchBlobUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    return URL.createObjectURL(await res.blob())
+  } catch {
+    return null
+  }
+}
+
+// Loads GIF media as blob-URL-backed elements so ctx.drawImage() never taints
+// the canvas. The browser animates them; each drawImage call captures the
+// current frame, giving real animation in the exported video.
+async function loadGifImgs(comments: RankedComment[]): Promise<{
+  gifImgs: Map<string, GifMedia>
+  cleanup: () => void
+}> {
+  const gifImgs = new Map<string, GifMedia>()
+  const nodes: (HTMLImageElement | HTMLVideoElement)[] = []
+  const blobUrls: string[] = []
+  const urls = [...new Set(comments.map(c => c.gifUrl).filter(Boolean) as string[])]
+
+  await Promise.all(urls.map(async (url) => {
+    // Fetch via extension host_permissions — returns same-origin blob URL (no canvas taint)
+    let blobUrl: string | null = null
+    let contentType = ""
+    try {
+      const resp = await Promise.race([
+        fetch(url),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
+      ])
+      contentType = resp.headers.get("content-type") ?? ""
+      const blob = new Blob([await resp.arrayBuffer()], { type: contentType })
+      blobUrl = URL.createObjectURL(blob)
+    } catch { return }
+    if (!blobUrl) return
+    blobUrls.push(blobUrl)
+
+    // Decide element type from actual content-type, not URL extension
+    const useVideo = contentType.startsWith("video/") || isVideoUrl(url)
+
+    await new Promise<void>(res => {
+      const done = () => res()
+      if (useVideo) {
+        // Videos play even when off-screen — animation works regardless of position
+        const vid = document.createElement("video")
+        vid.autoplay = true; vid.loop = true; vid.muted = true
+        vid.setAttribute("playsinline", "")
+        vid.style.cssText = "position:fixed;right:-9999px;bottom:0;width:200px;height:200px;opacity:0.001;pointer-events:none;"
+        document.body.appendChild(vid)
+        nodes.push(vid)
+        vid.onloadeddata = () => { gifImgs.set(url, vid); vid.play().catch(() => {}); done() }
+        vid.onerror = done
+        vid.src = blobUrl
+      } else {
+        // For image/gif: position in the VIEWPORT (not off-screen) so Chrome
+        // keeps the animation engine running. Off-screen GIFs are paused.
+        const img = new Image()
+        img.style.cssText = "position:fixed;right:0;bottom:0;width:200px;height:200px;opacity:0.001;pointer-events:none;z-index:-9999;"
+        document.body.appendChild(img)
+        nodes.push(img)
+        img.onload = () => {
+          gifImgs.set(url, img)
+          // Give the browser ~300ms to advance past frame 1 before recording starts
+          setTimeout(done, 300)
+        }
+        img.onerror = done
+        img.src = blobUrl
+      }
+    })
+  }))
+
+  return {
+    gifImgs,
+    cleanup: () => {
+      nodes.forEach(n => n.remove())
+      blobUrls.forEach(u => URL.revokeObjectURL(u))
+    },
+  }
+}
+
 export async function exportReelVideo(reelData: ReelData, comments: RankedComment[]): Promise<void> {
   await document.fonts.ready
 
@@ -273,9 +387,11 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
     if (tier in byTier) byTier[tier].push(c)
   }
 
-  const [thumbImg, profImg] = await Promise.all([
+  const rankedComments = TIERS_ORDER.flatMap(t => byTier[t])
+  const [thumbImg, profImg, { gifImgs, cleanup }] = await Promise.all([
     reelData.thumbnailUrl ? loadImg(reelData.thumbnailUrl) : Promise.resolve(null),
     reelData.profilePicUrl ? loadImg(reelData.profilePicUrl) : Promise.resolve(null),
+    loadGifImgs(rankedComments),
   ])
 
   const canvas = document.createElement("canvas")
@@ -353,7 +469,7 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
             ? Math.min((ce - ci * COMMENT_DUR) / SLIDE_DUR, 1)
             : 0
         }
-        drawTierScene(ctx, tier, tierComments, labelProgress, visibleCount, currentSlide)
+        drawTierScene(ctx, tier, tierComments, labelProgress, visibleCount, currentSlide, false, gifImgs)
       }
     }
 
@@ -368,6 +484,7 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
       drawFrame()
     }, 1000 / FPS)
   })
+  cleanup()
 }
 
 const GREEN_SCREEN = "#00FF00"  // chroma key color — remove in CapCut with Chroma Key tool
@@ -381,7 +498,8 @@ const BATCH_DUR     = BATCH_SLIDE + BATCH_HOLD
 function drawBatchScene(
   ctx: CanvasRenderingContext2D,
   batch: RankedComment[],
-  batchT: number            // elapsed time within this batch (0 → BATCH_DUR)
+  batchT: number,
+  gifImgs?: Map<string, GifMedia>
 ) {
   ctx.clearRect(0, 0, W, H)
   ctx.fillStyle = GREEN_SCREEN
@@ -395,21 +513,23 @@ function drawBatchScene(
     const innerW = CARD_W - 8 - CARD_PAD_X * 2
     ctx.font = `bold ${U_SIZE}px "Courier New", monospace`
     const uH = wrapText(ctx, `@${c.username}`, innerW).length * U_LINE
-    ctx.font = `${T_SIZE}px "Courier New", monospace`
-    const tH = wrapText(ctx, c.text, innerW).length * T_LINE
-    return CARD_PAD_Y + uH + 10 + tH + CARD_PAD_Y
+    const gm = c.gifUrl ? gifImgs?.get(c.gifUrl) : undefined
+    const gmReady = gm && (gm instanceof HTMLVideoElement ? gm.videoWidth > 0 : (gm as HTMLImageElement).naturalWidth > 0)
+    const contentH = gmReady
+      ? gifContentHeight(innerW, gm!)
+      : (() => { ctx.font = `${T_SIZE}px "Courier New", monospace`; return wrapText(ctx, c.text, innerW).length * T_LINE })()
+    return CARD_PAD_Y + uH + 10 + contentH + CARD_PAD_Y
   })
 
-  const GAP        = 28
-  const totalH     = heights.reduce((a, b) => a + b, 0) + GAP * (batch.length - 1)
-  let   y          = Math.round((H - totalH) / 2)
+  const GAP    = 28
+  const totalH = heights.reduce((a, b) => a + b, 0) + GAP * (batch.length - 1)
+  let   y      = Math.round((H - totalH) / 2)
 
   for (let i = 0; i < batch.length; i++) {
-    // Stagger: each card starts sliding 80 ms after the previous
     const slideStart = i * (BATCH_SLIDE / (batch.length + 1))
     const progress   = Math.min(Math.max((batchT - slideStart) / (BATCH_SLIDE * 0.7), 0), 1)
     const color      = TIER_COLOR[batch[i].tier] ?? "#888"
-    const h          = drawCard(ctx, batch[i], PAD, y, CARD_W, color, progress)
+    const h          = drawCard(ctx, batch[i], PAD, y, CARD_W, color, progress, gifImgs)
     y += h + GAP
   }
 }
@@ -419,11 +539,13 @@ function drawBatchScene(
 export async function exportOverlayVideo(comments: RankedComment[]): Promise<void> {
   await document.fonts.ready
 
-  // Only show ranked comments (skip DRAFT and GIF)
+  // Only show ranked comments (skip DRAFT and GIF tier)
   const displayComments = comments.filter(
     (c) => c.tier !== "DRAFT" && c.tier !== "GIF"
   )
   if (displayComments.length === 0) return
+
+  const { gifImgs, cleanup } = await loadGifImgs(displayComments)
 
   // Split into batches of 3
   const batches: RankedComment[][] = []
@@ -476,7 +598,8 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
       }
       const batchIdx = Math.min(Math.floor(t / BATCH_DUR), batches.length - 1)
       const batchT   = t - batchIdx * BATCH_DUR
-      drawBatchScene(ctx, batches[batchIdx], batchT)
+      drawBatchScene(ctx, batches[batchIdx], batchT, gifImgs)
     }, 1000 / FPS)
   })
+  cleanup()
 }

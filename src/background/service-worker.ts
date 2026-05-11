@@ -18,6 +18,20 @@ chrome.runtime.onStartup.addListener(() => {
 })
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // Fetch media (GIF/video) as ArrayBuffer so the sidepanel can create a
+  // same-origin blob URL — avoids canvas taint during video export.
+  if (message.type === "FETCH_MEDIA_BLOB") {
+    const url = message.url as string
+    fetch(url)
+      .then(async (r) => {
+        const contentType = r.headers.get("content-type") ?? "application/octet-stream"
+        const buffer = await r.arrayBuffer()
+        sendResponse({ buffer, contentType })
+      })
+      .catch((err) => sendResponse({ error: String(err) }))
+    return true
+  }
+
   if (message.type === "SCRAPE_REEL") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       const tab = tabs[0]
@@ -90,7 +104,15 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
     return { type: "ERROR", error: "NO_COMMENTS_SCRAPED" }
   }
 
-  // GIF comments skip AI ranking — they go straight to the GIF tier
+  // Scrape/List mode: skip AI entirely — all comments (including GIFs) go into the flat list
+  if (payload.mode === "scrape") {
+    return {
+      type: "RANK_RESULT",
+      payload: payload.comments.map((c) => ({ ...c, tier: "A" as Tier, locked: false })),
+    }
+  }
+
+  // Normal/savage/indian: GIF comments skip AI and go to the GIF holding tier
   const gifComments = payload.comments.filter((c) => c.gifUrl)
   const textComments = payload.comments.filter((c) => !c.gifUrl)
 
@@ -102,16 +124,6 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
 
   if (textComments.length === 0) {
     return { type: "RANK_RESULT", payload: gifRanked }
-  }
-
-  // Scrape/List mode: skip AI entirely, put everything in one flat list
-  if (payload.mode === "scrape") {
-    const listRanked: RankedComment[] = textComments.map((c) => ({
-      ...c,
-      tier: "A" as Tier,
-      locked: false,
-    }))
-    return { type: "RANK_RESULT", payload: [...listRanked, ...gifRanked] }
   }
 
   try {
