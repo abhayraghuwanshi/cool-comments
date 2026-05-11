@@ -56,7 +56,11 @@ const L_SIZE     = 28   // likes font size
 
 type GifMedia = HTMLImageElement | HTMLVideoElement
 
-function isVideoUrl(url: string) { return /\.(mp4|webm|mov)(\?|#|$)/i.test(url) }
+function gifVideoCandidates(url: string): string[] {
+  if (!/giphy\.com/i.test(url) || !/\.gif(\?|#|$)/i.test(url)) return []
+  const mp4Url = url.replace(/\.gif(\?|#|$)/i, ".mp4$1")
+  return mp4Url === url ? [] : [mp4Url]
+}
 
 function mediaDims(m: GifMedia): { nw: number; nh: number } {
   if (m instanceof HTMLVideoElement) return { nw: m.videoWidth || 200, nh: m.videoHeight || 200 }
@@ -297,19 +301,24 @@ function loadImg(src: string): Promise<HTMLImageElement | null> {
 
 // Extension pages share host_permissions — fetch directly from the sidepanel.
 // Returns a same-origin blob URL that never taints the canvas.
-async function fetchBlobUrl(url: string): Promise<string | null> {
+async function fetchMediaBlobUrl(url: string): Promise<{ blobUrl: string; contentType: string } | null> {
   try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    return URL.createObjectURL(await res.blob())
+    const resp = await Promise.race([
+      fetch(url),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
+    ])
+    if (!resp.ok) return null
+    const contentType = resp.headers.get("content-type") ?? ""
+    const blob = new Blob([await resp.arrayBuffer()], { type: contentType })
+    return { blobUrl: URL.createObjectURL(blob), contentType }
   } catch {
     return null
   }
 }
 
-// Loads GIF media as blob-URL-backed elements so ctx.drawImage() never taints
-// the canvas. The browser animates them; each drawImage call captures the
-// current frame, giving real animation in the exported video.
+// Loads GIF/media as blob-URL-backed elements so ctx.drawImage() never taints
+// the canvas. Prefer video for Giphy GIFs because hidden HTMLImageElement GIFs
+// are easy for Chrome to throttle/freeze, which records only one frame.
 async function loadGifImgs(comments: RankedComment[]): Promise<{
   gifImgs: Map<string, GifMedia>
   cleanup: () => void
@@ -321,22 +330,20 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
 
   await Promise.all(urls.map(async (url) => {
     // Fetch via extension host_permissions — returns same-origin blob URL (no canvas taint)
-    let blobUrl: string | null = null
-    let contentType = ""
-    try {
-      const resp = await Promise.race([
-        fetch(url),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
-      ])
-      contentType = resp.headers.get("content-type") ?? ""
-      const blob = new Blob([await resp.arrayBuffer()], { type: contentType })
-      blobUrl = URL.createObjectURL(blob)
-    } catch { return }
-    if (!blobUrl) return
+    // For Giphy image GIFs, try the equivalent MP4 first so export samples a playing video.
+    const candidates = [...gifVideoCandidates(url), url]
+    let media: { blobUrl: string; contentType: string } | null = null
+    for (const candidate of candidates) {
+      media = await fetchMediaBlobUrl(candidate)
+      if (media) break
+    }
+    if (!media) return
+
+    const { blobUrl, contentType } = media
     blobUrls.push(blobUrl)
 
     // Decide element type from actual content-type, not URL extension
-    const useVideo = contentType.startsWith("video/") || isVideoUrl(url)
+    const useVideo = contentType.startsWith("video/")
 
     await new Promise<void>(res => {
       const done = () => res()
@@ -355,7 +362,7 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
         // For image/gif: position in the VIEWPORT (not off-screen) so Chrome
         // keeps the animation engine running. Off-screen GIFs are paused.
         const img = new Image()
-        img.style.cssText = "position:fixed;right:0;bottom:0;width:200px;height:200px;opacity:0.001;pointer-events:none;z-index:-9999;"
+        img.style.cssText = "position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:2147483647;"
         document.body.appendChild(img)
         nodes.push(img)
         img.onload = () => {
