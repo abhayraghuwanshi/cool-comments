@@ -86,25 +86,72 @@ if (!over) return
     // List mode: flat group for all non-DRAFT/non-GIF, keyed to "A"
     if (isListMode) {
       const isSpecial = (t: Tier) => t === "DRAFT" || t === "GIF"
-      if (isTierLabel) {
-        const target = overId as Tier
-        onCommentsChange(comments.map((c) => c.id === draggedId
-          ? { ...c, tier: isSpecial(target) ? target : "A" as Tier }
-          : c))
-      } else {
-        const overComment = comments.find((c) => c.id === overId)
-        if (!overComment) return
-        if (isSpecial(overComment.tier)) {
-          onCommentsChange(comments.map((c) => c.id === draggedId ? { ...c, tier: overComment.tier } : c))
-        } else {
-          const listItems = comments.filter((c) => !isSpecial(c.tier))
-          const specials = comments.filter((c) => isSpecial(c.tier))
-          const oldIndex = listItems.findIndex((c) => c.id === draggedId)
-          const newIndex = listItems.findIndex((c) => c.id === overId)
-          if (oldIndex === newIndex) return
-          onCommentsChange([...arrayMove(listItems, oldIndex, newIndex), ...specials])
+      const sectionFor = (t: Tier) => isSpecial(t) ? t : "A"
+      const sectionRank = (t: Tier) => t === "A" ? 0 : t === "DRAFT" ? 1 : 2
+
+      const insertAt = (items: RankedComment[], item: RankedComment, index: number) => [
+        ...items.slice(0, index),
+        item,
+        ...items.slice(index),
+      ]
+
+      const moveInListMode = (targetTier: Tier, targetId?: string) => {
+        const targetSection = sectionFor(targetTier)
+        const updatedDragged = {
+          ...dragged,
+          tier: targetSection === "A" ? "A" as Tier : targetSection,
         }
+
+        const withoutDragged = comments.filter((c) => c.id !== draggedId)
+        const grouped: Record<"A" | "DRAFT" | "GIF", RankedComment[]> = {
+          A: withoutDragged.filter((c) => !isSpecial(c.tier)),
+          DRAFT: withoutDragged.filter((c) => c.tier === "DRAFT"),
+          GIF: withoutDragged.filter((c) => c.tier === "GIF"),
+        }
+
+        const targetItems = grouped[targetSection]
+        const overIndex = targetId ? targetItems.findIndex((c) => c.id === targetId) : -1
+        grouped[targetSection] = insertAt(
+          targetItems,
+          updatedDragged,
+          overIndex >= 0 ? overIndex : targetItems.length,
+        )
+
+        onCommentsChange([
+          ...grouped.A,
+          ...grouped.DRAFT,
+          ...grouped.GIF,
+        ])
       }
+
+      if (isTierLabel) {
+        moveInListMode(overId as Tier)
+        return
+      }
+
+      const overComment = comments.find((c) => c.id === overId)
+      if (!overComment) return
+      if (overId === draggedId) return
+
+      const draggedSection = sectionFor(dragged.tier)
+      const overSection = sectionFor(overComment.tier)
+      if (draggedSection === overSection) {
+        const sectionItems = comments.filter((c) => sectionFor(c.tier) === draggedSection)
+        const oldIndex = sectionItems.findIndex((c) => c.id === draggedId)
+        const newIndex = sectionItems.findIndex((c) => c.id === overId)
+        if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return
+
+        const reordered = arrayMove(sectionItems, oldIndex, newIndex)
+        const otherItems = comments.filter((c) => sectionFor(c.tier) !== draggedSection)
+        onCommentsChange([
+          ...otherItems.filter((c) => sectionRank(sectionFor(c.tier)) < sectionRank(draggedSection)),
+          ...reordered,
+          ...otherItems.filter((c) => sectionRank(sectionFor(c.tier)) > sectionRank(draggedSection)),
+        ])
+        return
+      }
+
+      moveInListMode(overComment.tier, overId)
       return
     }
 
