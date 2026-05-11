@@ -1,4 +1,4 @@
-import type { RankedComment, ReelData, Tier } from "../../shared/messages"
+import type { RankedComment, RankingMode, ReelData, Tier } from "../../shared/messages"
 
 const W   = 1080
 const H   = 1920
@@ -273,6 +273,67 @@ function drawTierScene(
   }
 }
 
+function drawListScene(
+  ctx: CanvasRenderingContext2D,
+  batch: RankedComment[],
+  labelProgress: number,
+  gifImgs?: Map<string, GifMedia>
+) {
+  ctx.clearRect(0, 0, W, H)
+  ctx.fillStyle = "#080808"
+  ctx.fillRect(0, 0, W, H)
+
+  const color = TIER_COLOR.A
+  const glow = ctx.createRadialGradient(W, 0, 0, W, 0, W)
+  glow.addColorStop(0, color + "18")
+  glow.addColorStop(1, "transparent")
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, W, H)
+
+  const lx = (1 - easeOut(labelProgress)) * -420
+  ctx.save()
+  ctx.translate(lx, 0)
+  ctx.textBaseline = "top"
+  ctx.font = 'bold 132px "Bebas Neue", Impact, sans-serif'
+  ctx.fillStyle = "#ffffff"
+  ctx.fillText("COMMENTS", 60, 88)
+  ctx.restore()
+
+  const div = ctx.createLinearGradient(60, 260, W - 60, 260)
+  div.addColorStop(0, color + "aa")
+  div.addColorStop(1, color + "00")
+  ctx.strokeStyle = div
+  ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(60, 260); ctx.lineTo(W - 60, 260); ctx.stroke()
+
+  const PAD = 60
+  const CARD_W = W - PAD * 2
+
+  const heights = batch.map((comment) => {
+    const innerW = CARD_W - 8 - CARD_PAD_X * 2
+    ctx.font = `bold ${U_SIZE}px "Courier New", monospace`
+    const uH = wrapText(ctx, `@${comment.username}`, innerW).length * U_LINE
+    const gm = comment.gifUrl ? gifImgs?.get(comment.gifUrl) : undefined
+    const gmReady = gm && (gm instanceof HTMLVideoElement ? gm.videoWidth > 0 : (gm as HTMLImageElement).naturalWidth > 0)
+    const contentH = gmReady
+      ? gifContentHeight(innerW, gm!)
+      : (() => { ctx.font = `${T_SIZE}px "Courier New", monospace`; return wrapText(ctx, comment.text, innerW).length * T_LINE })()
+    return CARD_PAD_Y + uH + 10 + contentH + CARD_PAD_Y
+  })
+
+  const GAP = 28
+  const totalH = heights.reduce((sum, h) => sum + h, 0) + GAP * Math.max(0, batch.length - 1)
+  let y = Math.max(310, Math.round((H + 260 - totalH) / 2))
+
+  for (let i = 0; i < batch.length; i++) {
+    const slideStart = i * (BATCH_SLIDE / (batch.length + 1))
+    const progress = Math.min(Math.max((labelProgress - slideStart) / (BATCH_SLIDE * 0.7), 0), 1)
+    const comment = batch[i]
+    const h = drawCard(ctx, comment, PAD, y, CARD_W, TIER_COLOR[comment.tier] ?? color, progress, gifImgs)
+    y += h + GAP
+  }
+}
+
 function drawOutro(ctx: CanvasRenderingContext2D, progress: number) {
   ctx.fillStyle = "#080808"
   ctx.fillRect(0, 0, W, H)
@@ -385,8 +446,13 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
   }
 }
 
-export async function exportReelVideo(reelData: ReelData, comments: RankedComment[]): Promise<void> {
+export async function exportReelVideo(
+  reelData: ReelData,
+  comments: RankedComment[],
+  rankingMode?: RankingMode,
+): Promise<void> {
   await document.fonts.ready
+  const isListMode = rankingMode === "scrape"
 
   const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [], GIF: [] }
   for (const c of comments) {
@@ -394,7 +460,10 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
     if (tier in byTier) byTier[tier].push(c)
   }
 
-  const rankedComments = TIERS_ORDER.flatMap(t => byTier[t])
+  const listComments = comments.filter((c) => c.tier !== "DRAFT" && c.tier !== "GIF")
+  const rankedComments = isListMode ? listComments : TIERS_ORDER.flatMap(t => byTier[t])
+  if (rankedComments.length === 0) return
+
   const [thumbImg, profImg, { gifImgs, cleanup }] = await Promise.all([
     reelData.thumbnailUrl ? loadImg(reelData.thumbnailUrl) : Promise.resolve(null),
     reelData.profilePicUrl ? loadImg(reelData.profilePicUrl) : Promise.resolve(null),
@@ -426,9 +495,18 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
 
   const tierStarts: number[] = []
   let cursor = INTRO_DUR
-  for (const tier of TIERS_ORDER) {
+  const listBatches: RankedComment[][] = []
+  if (isListMode) {
+    for (let i = 0; i < listComments.length; i += BATCH_SIZE) {
+      listBatches.push(listComments.slice(i, i + BATCH_SIZE))
+    }
     tierStarts.push(cursor)
-    cursor += tierDur(tier)
+    cursor += listBatches.length * BATCH_DUR
+  } else {
+    for (const tier of TIERS_ORDER) {
+      tierStarts.push(cursor)
+      cursor += tierDur(tier)
+    }
   }
   const outroStart = cursor
   const totalDur = outroStart + OUTRO_DUR
@@ -455,6 +533,11 @@ export async function exportReelVideo(reelData: ReelData, comments: RankedCommen
         drawIntro(ctx, reelData, thumbImg, profImg, t / INTRO_DUR)
       } else if (t >= outroStart) {
         drawOutro(ctx, (t - outroStart) / OUTRO_DUR)
+      } else if (isListMode) {
+        const te = t - tierStarts[0]
+        const batchIdx = Math.min(Math.floor(te / BATCH_DUR), listBatches.length - 1)
+        const batchT = te - batchIdx * BATCH_DUR
+        drawListScene(ctx, listBatches[batchIdx], batchT, gifImgs)
       } else {
         let ti = TIERS_ORDER.length - 1
         for (let i = 0; i < TIERS_ORDER.length - 1; i++) {

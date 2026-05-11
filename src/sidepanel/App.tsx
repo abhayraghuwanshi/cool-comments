@@ -377,7 +377,7 @@ export default function App() {
         onExport={async () => {
           if (!reelData || isExporting) return
           setIsExporting(true)
-          await exportReelVideo(reelData, comments).catch(console.error)
+          await exportReelVideo(reelData, comments, rankingMode).catch(console.error)
           setIsExporting(false)
         }}
         onExportOverlay={async () => {
