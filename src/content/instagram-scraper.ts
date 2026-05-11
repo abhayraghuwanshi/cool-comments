@@ -83,12 +83,15 @@ function scrapeComments(limit: number): RawComment[] {
   const usernameSpans = document.querySelectorAll<HTMLElement>("span._ap3a._aacw, span._aacw")
   console.log("[scraper] username spans found:", usernameSpans.length)
 
-  // Also log ALL imgs on the page so we can see GIF candidates
+  // Log ALL non-profile imgs so we can spot new GIF URL patterns
   const allImgs = document.querySelectorAll<HTMLImageElement>("img")
-  const gifCandidates = [...allImgs].filter(img =>
-    img.src.includes("/emg1/") || img.src.includes("giphy.com")
+  const nonProfileImgs = [...allImgs].filter(img => !img.alt?.includes("profile picture") && img.src && !img.src.startsWith("data:"))
+  const gifCandidates = nonProfileImgs.filter(img =>
+    img.src.includes("/emg1/") || img.src.includes("giphy.com") || img.src.includes(".gif")
   )
-  console.log("[scraper] total imgs on page:", allImgs.length, "| gif candidates (emg1/giphy):", gifCandidates.length)
+  console.log("[scraper] total imgs:", allImgs.length, "| non-profile:", nonProfileImgs.length, "| gif candidates:", gifCandidates.length)
+  // Log first 10 non-profile imgs to help spot new GIF URL patterns
+  nonProfileImgs.slice(0, 10).forEach((img, i) => console.log(`  [img ${i}] alt="${img.alt}" src:`, img.src.slice(0, 120)))
   gifCandidates.forEach((img, i) => console.log(`  [gif-candidate ${i}] src:`, img.src.slice(0, 120)))
 
   for (const usernameSpan of usernameSpans) {
@@ -158,8 +161,12 @@ function findCommentRoot(el: HTMLElement): HTMLElement | null {
     // Bail if we've moved into a container with multiple comments
     if (uCount > 1) break
 
-    if (uCount === 1 && cur.querySelector("time[datetime]") && hasCommentContent(cur)) {
-      return cur
+    if (uCount === 1) {
+      const gifUrl = extractGifUrl(cur)
+      const hasContent = hasCommentText(cur) || gifUrl !== null
+      // Text comments have <time datetime>; GIF-only comments don't — accept either as anchor
+      const hasAnchor = !!cur.querySelector("time[datetime]") || gifUrl !== null
+      if (hasContent && hasAnchor) return cur
     }
     cur = cur.parentElement
   }
@@ -193,11 +200,12 @@ function hasCommentText(el: HTMLElement): boolean {
 }
 
 /**
- * Look for a GIF image inside a comment root.
- * Instagram proxies Giphy GIFs through fbcdn.net/emg1/; we extract the
- * original Giphy URL from the `url=` query-string parameter for longevity.
+ * Look for a GIF image or looping video inside a comment root.
+ * Instagram proxies Giphy GIFs through fbcdn.net/emg1/ or serves them as
+ * looping <video> elements. We check both.
  */
 function extractGifUrl(root: HTMLElement): string | null {
+  // Check <img> elements first
   for (const img of root.querySelectorAll<HTMLImageElement>("img")) {
     const alt = (img.alt ?? "").toLowerCase()
     if (alt.includes("profile picture")) continue
@@ -205,28 +213,47 @@ function extractGifUrl(root: HTMLElement): string | null {
     const src = img.getAttribute("src") ?? img.src ?? ""
     if (!src) continue
 
-    console.log("[extractGifUrl] checking img src:", src.slice(0, 100))
-
     // Instagram embedded-media gateway (CDN proxy for Giphy)
     if (src.includes("/emg1/")) {
       try {
         const proxied = new URL(src).searchParams.get("url")
         if (proxied) {
           const decoded = decodeURIComponent(proxied)
-          console.log("[extractGifUrl] ✓ found emg1 gif →", decoded.slice(0, 80))
+          console.log("[extractGifUrl] ✓ emg1 →", decoded.slice(0, 80))
           return decoded
         }
       } catch (e) { console.warn("[extractGifUrl] URL parse failed:", e) }
-      console.log("[extractGifUrl] ✓ returning raw emg1 src")
       return src
     }
 
-    // Direct Giphy URL
+    // Giphy URL (direct or CDN)
     if (src.includes("giphy.com")) {
-      console.log("[extractGifUrl] ✓ direct giphy url")
+      console.log("[extractGifUrl] ✓ giphy img")
+      return src
+    }
+
+    // Any .gif extension image
+    if (src.includes(".gif")) {
+      console.log("[extractGifUrl] ✓ .gif img")
       return src
     }
   }
+
+  // Instagram often serves GIFs as autoplay looping <video> elements in comments
+  for (const video of root.querySelectorAll<HTMLVideoElement>("video")) {
+    const src = video.getAttribute("src") ?? video.src ?? ""
+    const poster = video.getAttribute("poster") ?? ""
+    // Only treat as GIF if it's a short looping video (no controls = inline GIF)
+    if (video.loop && !video.controls && src) {
+      console.log("[extractGifUrl] ✓ looping video")
+      return src
+    }
+    if ((src.includes("giphy") || src.includes("emg1") || poster.includes("giphy") || poster.includes("emg1")) && src) {
+      console.log("[extractGifUrl] ✓ giphy video")
+      return src
+    }
+  }
+
   return null
 }
 
