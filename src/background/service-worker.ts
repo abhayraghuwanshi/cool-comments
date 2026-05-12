@@ -24,6 +24,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const url = message.url as string
     fetch(url)
       .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const contentType = r.headers.get("content-type") ?? "application/octet-stream"
         const buffer = await r.arrayBuffer()
         sendResponse({ buffer, contentType })

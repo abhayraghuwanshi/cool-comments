@@ -62,6 +62,14 @@ function gifVideoCandidates(url: string): string[] {
   return mp4Url === url ? [] : [mp4Url]
 }
 
+function looksLikeVideo(url: string): boolean {
+  return /\.(mp4|webm|mov)(\?|#|$)/i.test(url)
+}
+
+function isDrawableMedia(contentType: string): boolean {
+  return contentType.startsWith("image/") || contentType.startsWith("video/")
+}
+
 function mediaDims(m: GifMedia): { nw: number; nh: number } {
   if (m instanceof HTMLVideoElement) return { nw: m.videoWidth || 200, nh: m.videoHeight || 200 }
   return { nw: m.naturalWidth || 200, nh: m.naturalHeight || 200 }
@@ -363,17 +371,29 @@ function loadImg(src: string): Promise<HTMLImageElement | null> {
 // Extension pages share host_permissions — fetch directly from the sidepanel.
 // Returns a same-origin blob URL that never taints the canvas.
 async function fetchMediaBlobUrl(url: string): Promise<{ blobUrl: string; contentType: string } | null> {
+  const fromBuffer = (buffer: ArrayBuffer, contentType: string) => {
+    const blob = new Blob([buffer], { type: contentType })
+    return { blobUrl: URL.createObjectURL(blob), contentType }
+  }
+
   try {
     const resp = await Promise.race([
       fetch(url),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
     ])
-    if (!resp.ok) return null
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const contentType = resp.headers.get("content-type") ?? ""
-    const blob = new Blob([await resp.arrayBuffer()], { type: contentType })
-    return { blobUrl: URL.createObjectURL(blob), contentType }
+    if (!isDrawableMedia(contentType)) throw new Error(`Not drawable media: ${contentType}`)
+    return fromBuffer(await resp.arrayBuffer(), contentType)
   } catch {
-    return null
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "FETCH_MEDIA_BLOB", url })
+      if (!response || response.error || !response.buffer) return null
+      if (!isDrawableMedia(response.contentType ?? "")) return null
+      return fromBuffer(response.buffer, response.contentType ?? "")
+    } catch {
+      return null
+    }
   }
 }
 
@@ -389,6 +409,36 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
   const blobUrls: string[] = []
   const urls = [...new Set(comments.map(c => c.gifUrl).filter(Boolean) as string[])]
 
+  async function loadElement(src: string, useVideo: boolean, mapKey: string): Promise<void> {
+    await new Promise<void>(res => {
+      const done = () => res()
+      if (useVideo) {
+        const vid = document.createElement("video")
+        vid.crossOrigin = "anonymous"
+        vid.autoplay = true; vid.loop = true; vid.muted = true
+        vid.setAttribute("playsinline", "")
+        vid.style.cssText = "position:fixed;right:-9999px;bottom:0;width:200px;height:200px;opacity:0.001;pointer-events:none;"
+        document.body.appendChild(vid)
+        nodes.push(vid)
+        vid.onloadeddata = () => { gifImgs.set(mapKey, vid); vid.play().catch(() => {}); done() }
+        vid.onerror = done
+        vid.src = src
+      } else {
+        const img = new Image()
+        img.crossOrigin = "anonymous"
+        img.style.cssText = "position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:2147483647;"
+        document.body.appendChild(img)
+        nodes.push(img)
+        img.onload = () => {
+          gifImgs.set(mapKey, img)
+          setTimeout(done, 300)
+        }
+        img.onerror = done
+        img.src = src
+      }
+    })
+  }
+
   await Promise.all(urls.map(async (url) => {
     // Fetch via extension host_permissions — returns same-origin blob URL (no canvas taint)
     // For Giphy image GIFs, try the equivalent MP4 first so export samples a playing video.
@@ -398,11 +448,14 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
       media = await fetchMediaBlobUrl(candidate)
       if (media) break
     }
-    if (!media) return
+    if (!media) {
+      await loadElement(url, looksLikeVideo(url), url)
+      return
+    }
 
     const { blobUrl, contentType } = media
     blobUrls.push(blobUrl)
-
+    await loadElement(blobUrl, contentType.startsWith("video/"), url)
     // Decide element type from actual content-type, not URL extension
     const useVideo = contentType.startsWith("video/")
 
@@ -435,6 +488,7 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
         img.src = blobUrl
       }
     })
+    if (!gifImgs.has(url)) await loadElement(url, looksLikeVideo(url), url)
   }))
 
   return {
@@ -528,11 +582,9 @@ export async function exportReelVideo(
     }
 
     recorder.start(200)
-    const startTime = Date.now()
+    let frameNo = 0
 
-    function drawFrame() {
-      const t = (Date.now() - startTime) / 1000
-
+    function drawFrame(t: number) {
       if (t < INTRO_DUR) {
         drawIntro(ctx, reelData, thumbImg, profImg, t / INTRO_DUR)
       } else if (t >= outroStart) {
@@ -568,14 +620,15 @@ export async function exportReelVideo(
     }
 
     const timerId = setInterval(() => {
-      const t = (Date.now() - startTime) / 1000
+      const t = frameNo / FPS
       if (t >= totalDur) {
         clearInterval(timerId)
         drawOutro(ctx, 1)
         setTimeout(() => recorder.stop(), 300)
         return
       }
-      drawFrame()
+      drawFrame(t)
+      frameNo++
     }, 1000 / FPS)
   })
   cleanup()
@@ -864,10 +917,10 @@ export async function exportOverlayVideo(
     }
 
     recorder.start(200)
-    const startTime = Date.now()
+    let frameNo = 0
 
     const timerId = setInterval(() => {
-      const t = (Date.now() - startTime) / 1000
+      const t = frameNo / FPS
       if (t >= totalDur) {
         clearInterval(timerId)
         drawOverlayOutro(ctx, 1)
@@ -908,6 +961,7 @@ export async function exportOverlayVideo(
 
         drawTierScene(ctx, tier, tierComments, labelProgress, visibleCount, currentSlide, true, gifImgs)
       }
+      frameNo++
     }, 1000 / FPS)
   })
   cleanup()

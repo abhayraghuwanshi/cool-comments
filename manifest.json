@@ -40,6 +40,10 @@
     "https://generativelanguage.googleapis.com/*",
     "https://api.openai.com/*",
     "https://*.fbcdn.net/*",
-    "https://*.cdninstagram.com/*"
+    "https://*.cdninstagram.com/*",
+    "https://giphy.com/*",
+    "https://*.giphy.com/*",
+    "https://tenor.com/*",
+    "https://*.tenor.com/*"
   ]
 }
