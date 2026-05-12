@@ -1,0 +1,40 @@
+[exportReel] mode=default isListMode=false input=60
+index.html-C1_RxiQg.js:40 [exportReel] byTier counts: Object
+index.html-C1_RxiQg.js:40 [exportReel] rankedComments=12 withGif=3
+index.html-C1_RxiQg.js:40   ranked: @_devil_heart_6150 tier=A gifUrl=https://cdn.fbsbx.com/v/t59.2708-21/660785880_1476658564206206_3029925773247887210_n.gif?_nc_cat=1&c
+index.html-C1_RxiQg.js:40   ranked: @yash_yours_truly tier=A gifUrl=https://cdn.fbsbx.com/v/t59.2708-21/468019849_932112128280528_6329556307685607696_n.gif?_nc_cat=106&
+index.html-C1_RxiQg.js:40   ranked: @thisishita_singh tier=S gifUrl=https://cdn.fbsbx.com/v/t59.2708-21/628853071_4348913008685718_3251484018544799683_n.gif?_nc_cat=1&c
+index.html-C1_RxiQg.js:40 [exportReel] loadGifImgs: 12 comments, 3 unique gifUrls
+index.html-C1_RxiQg.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/660785880_1476658564206206_3029925773247887210_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd6
+index.html-C1_RxiQg.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/468019849_932112128280528_6329556307685607696_n.gif?_nc_cat=106&ccb=1-7&_nc_sid=9dcd
+index.html-C1_RxiQg.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/628853071_4348913008685718_3251484018544799683_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd6
+
+index.html-C1_RxiQg.js:40 [exportReel]     img onerror src=https://cdn.fbsbx.com/v/t59.2708-21/660785880_14766585642062
+
+index.html-C1_RxiQg.js:40 [exportReel]     img onerror src=https://cdn.fbsbx.com/v/t59.2708-21/468019849_93211212828052
+index.html-C1_RxiQg.js:40 [exportReel]     img onerror src=https://cdn.fbsbx.com/v/t59.2708-21/628853071_43489130086857
+index.html-C1_RxiQg.js:40 [exportReel] loadGifImgs done: 0/3 loaded
+index.html-C1_RxiQg.js:40 [exportReel] GIF fallback to text for @_devil_heart_6150 
+Object
+gifUrl
+: 
+"https://cdn.fbsbx.com/v/t59.2708-21/660785880_1476658564206206_3029925773247887210_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd69&_nc_ohc=yVFV2vnFV4UQ7kNvwHrpw57&_nc_oc=Adpid8Wd-jhyLt-rMnlDAyTHhimIu18fmYTCqli6gOmpd07A2fSDK05L3rMlQv1PocRv5olKPyFMbhl3CTZZOgLk&_nc_zt=7&_nc_ht=cdn.fbsbx.com&_nc_gid=Xge0NBcz6xSTF51foQe5dw&_nc_ss=7b689&oh=03_Q7cD5QH4eeOLspkOzbNJmZ-5Xp_7e8kdpGzdMoOMmArVV7bS-A&oe=6A04EC8F"
+kind
+: 
+"missing"
+mapHas
+: 
+false
+mapSize
+: 
+0
+w
+: 
+0
+[[Prototype]]
+: 
+Object
+index.html-C1_RxiQg.js:40 [exportReel] GIF fallback to text for @yash_yours_truly 
+Object
+index.html-C1_RxiQg.js:40 [exportReel] GIF fallback to text for @thisishita_singh 
+Object

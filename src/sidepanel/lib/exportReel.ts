@@ -56,6 +56,8 @@ const L_SIZE     = 28   // likes font size
 
 type GifMedia = HTMLImageElement | HTMLVideoElement
 
+const drawCardLogged = new Set<string>()
+
 function gifVideoCandidates(url: string): string[] {
   if (!/giphy\.com/i.test(url) || !/\.gif(\?|#|$)/i.test(url)) return []
   const mp4Url = url.replace(/\.gif(\?|#|$)/i, ".mp4$1")
@@ -96,6 +98,12 @@ function drawCard(
   const hasGif = !!gifMedia && (
     gifMedia instanceof HTMLVideoElement ? gifMedia.videoWidth > 0 : (gifMedia as HTMLImageElement).naturalWidth > 0
   )
+  if (comment.gifUrl && !hasGif && !drawCardLogged.has(comment.gifUrl)) {
+    drawCardLogged.add(comment.gifUrl)
+    const kind = gifMedia instanceof HTMLVideoElement ? "video" : gifMedia instanceof HTMLImageElement ? "image" : "missing"
+    const w = gifMedia instanceof HTMLVideoElement ? gifMedia.videoWidth : gifMedia instanceof HTMLImageElement ? gifMedia.naturalWidth : 0
+    console.warn(`[exportReel] GIF fallback to text for @${comment.username}`, { gifUrl: comment.gifUrl, mapHas: gifImgs?.has(comment.gifUrl), kind, w, mapSize: gifImgs?.size })
+  }
 
   ctx.font = `${T_SIZE}px "Courier New", monospace`
   const tLines = hasGif ? [] : wrapText(ctx, comment.text, innerW)
@@ -404,10 +412,13 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
   gifImgs: Map<string, GifMedia>
   cleanup: () => void
 }> {
+  drawCardLogged.clear()
   const gifImgs = new Map<string, GifMedia>()
   const nodes: (HTMLImageElement | HTMLVideoElement)[] = []
   const blobUrls: string[] = []
   const urls = [...new Set(comments.map(c => c.gifUrl).filter(Boolean) as string[])]
+  console.log(`[exportReel] loadGifImgs: ${comments.length} comments, ${urls.length} unique gifUrls`)
+  for (const u of urls) console.log(`  → ${u.slice(0, 120)}`)
 
   async function loadElement(src: string, useVideo: boolean, mapKey: string): Promise<void> {
     await new Promise<void>(res => {
@@ -420,8 +431,16 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
         vid.style.cssText = "position:fixed;right:-9999px;bottom:0;width:200px;height:200px;opacity:0.001;pointer-events:none;"
         document.body.appendChild(vid)
         nodes.push(vid)
-        vid.onloadeddata = () => { gifImgs.set(mapKey, vid); vid.play().catch(() => {}); done() }
-        vid.onerror = done
+        vid.onloadeddata = () => {
+          gifImgs.set(mapKey, vid)
+          vid.play().catch(() => {})
+          console.log(`[exportReel]     video onloadeddata vw=${vid.videoWidth}x${vid.videoHeight} src=${src.slice(0, 60)}`)
+          done()
+        }
+        vid.onerror = () => {
+          console.warn(`[exportReel]     video onerror src=${src.slice(0, 60)}`)
+          done()
+        }
         vid.src = src
       } else {
         const img = new Image()
@@ -431,9 +450,13 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
         nodes.push(img)
         img.onload = () => {
           gifImgs.set(mapKey, img)
+          console.log(`[exportReel]     img onload nw=${img.naturalWidth}x${img.naturalHeight} src=${src.slice(0, 60)}`)
           setTimeout(done, 300)
         }
-        img.onerror = done
+        img.onerror = () => {
+          console.warn(`[exportReel]     img onerror src=${src.slice(0, 60)}`)
+          done()
+        }
         img.src = src
       }
     })
@@ -456,40 +479,15 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
     const { blobUrl, contentType } = media
     blobUrls.push(blobUrl)
     await loadElement(blobUrl, contentType.startsWith("video/"), url)
-    // Decide element type from actual content-type, not URL extension
-    const useVideo = contentType.startsWith("video/")
+    console.log(`[exportReel]   blob loaded (${contentType}) → mapHas=${gifImgs.has(url)} for ${url.slice(0, 80)}`)
 
-    await new Promise<void>(res => {
-      const done = () => res()
-      if (useVideo) {
-        // Videos play even when off-screen — animation works regardless of position
-        const vid = document.createElement("video")
-        vid.autoplay = true; vid.loop = true; vid.muted = true
-        vid.setAttribute("playsinline", "")
-        vid.style.cssText = "position:fixed;right:-9999px;bottom:0;width:200px;height:200px;opacity:0.001;pointer-events:none;"
-        document.body.appendChild(vid)
-        nodes.push(vid)
-        vid.onloadeddata = () => { gifImgs.set(url, vid); vid.play().catch(() => {}); done() }
-        vid.onerror = done
-        vid.src = blobUrl
-      } else {
-        // For image/gif: position in the VIEWPORT (not off-screen) so Chrome
-        // keeps the animation engine running. Off-screen GIFs are paused.
-        const img = new Image()
-        img.style.cssText = "position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:2147483647;"
-        document.body.appendChild(img)
-        nodes.push(img)
-        img.onload = () => {
-          gifImgs.set(url, img)
-          // Give the browser ~300ms to advance past frame 1 before recording starts
-          setTimeout(done, 300)
-        }
-        img.onerror = done
-        img.src = blobUrl
-      }
-    })
-    if (!gifImgs.has(url)) await loadElement(url, looksLikeVideo(url), url)
+    // If the blob-backed load failed silently, fall back to a direct URL load.
+    if (!gifImgs.has(url)) {
+      console.warn(`[exportReel]   blob load did not register; trying direct URL`)
+      await loadElement(url, looksLikeVideo(url), url)
+    }
   }))
+  console.log(`[exportReel] loadGifImgs done: ${gifImgs.size}/${urls.length} loaded`)
 
   return {
     gifImgs,
@@ -521,6 +519,13 @@ export async function exportReelVideo(
   const listComments = comments.filter((c) => c.tier !== "DRAFT" && c.tier !== "GIF")
   const rankedComments = isListMode ? listComments : TIERS_ORDER.flatMap(t => byTier[t])
   if (rankedComments.length === 0) return
+
+  console.log(`[exportReel] mode=${rankingMode} isListMode=${isListMode} input=${comments.length}`)
+  console.log(`[exportReel] byTier counts:`, Object.fromEntries(Object.entries(byTier).map(([k, v]) => [k, v.length])))
+  console.log(`[exportReel] rankedComments=${rankedComments.length} withGif=${rankedComments.filter(c => c.gifUrl).length}`)
+  for (const c of rankedComments.filter(c => c.gifUrl)) {
+    console.log(`  ranked: @${c.username} tier=${c.tier} gifUrl=${c.gifUrl?.slice(0, 100)}`)
+  }
 
   const [thumbImg, profImg, { gifImgs, cleanup }] = await Promise.all([
     reelData.thumbnailUrl ? loadImg(reelData.thumbnailUrl) : Promise.resolve(null),
