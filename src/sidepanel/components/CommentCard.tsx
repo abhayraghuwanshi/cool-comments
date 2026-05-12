@@ -8,7 +8,7 @@ const TIER_COLOR: Record<Tier, string> = {
   C: '#CC44FF', D: '#FFB300', F: '#FF1744',
   DRAFT: '#4a4a4a', GIF: '#FFD700',
 }
-const ALL_MOVE_TIERS: Tier[] = ["S", "A", "B", "C", "D", "F", "GIF", "DRAFT"]
+const ALL_MOVE_TIERS: Tier[] = ["S", "A", "B", "C", "D", "F", "DRAFT"]
 const LIST_MOVE_TIERS: Tier[] = ["A", "GIF", "DRAFT"]
 
 // Label shown on the tier button in the picker

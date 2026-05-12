@@ -383,7 +383,7 @@ export default function App() {
         onExportOverlay={async () => {
           if (isExporting) return
           setIsExporting(true)
-          await exportOverlayVideo(comments, reelData ?? undefined).catch(console.error)
+          await exportOverlayVideo(comments, reelData ?? undefined, rankingMode).catch(console.error)
           setIsExporting(false)
         }}
         onGoHome={() => setPhase("idle")}

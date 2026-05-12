@@ -459,6 +459,10 @@ export async function exportReelVideo(
     const tier = (c.tier?.toUpperCase() ?? "") as Tier
     if (tier in byTier) byTier[tier].push(c)
   }
+  if (!isListMode && byTier.GIF.length > 0) {
+    byTier.A.push(...byTier.GIF.map((c) => ({ ...c, tier: "A" as Tier })))
+    byTier.GIF = []
+  }
 
   const listComments = comments.filter((c) => c.tier !== "DRAFT" && c.tier !== "GIF")
   const rankedComments = isListMode ? listComments : TIERS_ORDER.flatMap(t => byTier[t])
@@ -771,27 +775,60 @@ function drawOverlayOutro(ctx: CanvasRenderingContext2D, progress: number) {
   ctx.restore()
 }
 
-// Green-screen overlay export — shows 3 comments at a time.
+// Green-screen overlay export.
 // Use in CapCut: Overlay → Chroma Key → pick green → done.
-export async function exportOverlayVideo(comments: RankedComment[], reelData?: ReelData): Promise<void> {
+export async function exportOverlayVideo(
+  comments: RankedComment[],
+  reelData?: ReelData,
+  rankingMode?: RankingMode,
+): Promise<void> {
   await document.fonts.ready
+  const isListMode = rankingMode === "scrape"
 
-  // Only show ranked comments (skip DRAFT and GIF tier)
-  const displayComments = comments.filter(
-    (c) => c.tier !== "DRAFT" && c.tier !== "GIF"
-  )
+  const byTier: Record<Tier, RankedComment[]> = { S: [], A: [], B: [], C: [], D: [], F: [], DRAFT: [], GIF: [] }
+  for (const c of comments) {
+    const tier = (c.tier?.toUpperCase() ?? "") as Tier
+    if (tier in byTier) byTier[tier].push(c)
+  }
+  if (!isListMode && byTier.GIF.length > 0) {
+    byTier.A.push(...byTier.GIF.map((c) => ({ ...c, tier: "A" as Tier })))
+    byTier.GIF = []
+  }
+
+  const displayComments = isListMode
+    ? comments.filter((c) => c.tier !== "DRAFT" && c.tier !== "GIF")
+    : TIERS_ORDER.flatMap((tier) => byTier[tier])
   if (displayComments.length === 0) return
+  const activeTiers = TIERS_ORDER.filter((tier) => byTier[tier].length > 0)
 
   const { gifImgs, cleanup } = await loadGifImgs(displayComments)
 
-  // Split into batches of 3
+  // List mode is a flat feed, three comments per slide.
   const batches: RankedComment[][] = []
-  for (let i = 0; i < displayComments.length; i += BATCH_SIZE) {
-    batches.push(displayComments.slice(i, i + BATCH_SIZE))
+  if (isListMode) {
+    for (let i = 0; i < displayComments.length; i += BATCH_SIZE) {
+      batches.push(displayComments.slice(i, i + BATCH_SIZE))
+    }
+  }
+
+  function tierDur(tier: Tier) {
+    const n = byTier[tier].length
+    return LABEL_DUR + (n === 0 ? EMPTY_DUR : n * COMMENT_DUR)
+  }
+
+  const tierStarts: number[] = []
+  let cursor = OVERLAY_INTRO_DUR
+  if (isListMode) {
+    cursor += batches.length * BATCH_DUR
+  } else {
+    for (const tier of activeTiers) {
+      tierStarts.push(cursor)
+      cursor += tierDur(tier)
+    }
   }
 
   const commentsStart = OVERLAY_INTRO_DUR
-  const outroStart    = commentsStart + batches.length * BATCH_DUR
+  const outroStart    = cursor
   const totalDur      = outroStart + OVERLAY_OUTRO_DUR
 
   const username = reelData?.username ?? "creator"
@@ -842,10 +879,34 @@ export async function exportOverlayVideo(comments: RankedComment[], reelData?: R
         drawOverlayIntro(ctx, username, t / OVERLAY_INTRO_DUR)
       } else if (t >= outroStart) {
         drawOverlayOutro(ctx, (t - outroStart) / OVERLAY_OUTRO_DUR)
-      } else {
+      } else if (isListMode) {
         const batchIdx = Math.min(Math.floor((t - commentsStart) / BATCH_DUR), batches.length - 1)
         const batchT   = (t - commentsStart) - batchIdx * BATCH_DUR
         drawBatchScene(ctx, batches[batchIdx], batchT, gifImgs)
+      } else {
+        let ti = tierStarts.length - 1
+        for (let i = 0; i < tierStarts.length - 1; i++) {
+          if (t < tierStarts[i + 1]) { ti = i; break }
+        }
+
+        const tier = activeTiers[ti]
+        const te = t - tierStarts[ti]
+        const tierComments = byTier[tier]
+
+        let labelProgress: number, visibleCount: number, currentSlide: number
+        if (te < LABEL_DUR) {
+          labelProgress = te / LABEL_DUR; visibleCount = 0; currentSlide = 0
+        } else {
+          labelProgress = 1
+          const ce = te - LABEL_DUR
+          const ci = Math.floor(ce / COMMENT_DUR)
+          visibleCount = Math.min(ci, tierComments.length)
+          currentSlide = ci < tierComments.length
+            ? Math.min((ce - ci * COMMENT_DUR) / SLIDE_DUR, 1)
+            : 0
+        }
+
+        drawTierScene(ctx, tier, tierComments, labelProgress, visibleCount, currentSlide, true, gifImgs)
       }
     }, 1000 / FPS)
   })

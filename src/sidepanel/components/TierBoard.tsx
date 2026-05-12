@@ -37,6 +37,11 @@ export function TierBoard({ comments, onCommentsChange, rankingMode }: Props) {
 
   const activeComment = activeId ? comments.find((c) => c.id === activeId) : null
 
+  useEffect(() => {
+    if (isListMode || !comments.some((c) => c.tier === "GIF")) return
+    onCommentsChange(comments.map((c) => (c.tier === "GIF" ? { ...c, tier: "A" as Tier } : c)))
+  }, [comments, isListMode, onCommentsChange])
+
   function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string)
   }
@@ -266,6 +271,8 @@ if (!over) return
           onMoveTo={handleMoveTo}
         />
 
+        {isListMode && (
+          <>
         {/* GIF section divider */}
         <div className="mx-3 mt-4 mb-0 flex items-center gap-2">
           <div className="flex-1 h-px bg-[#222]" />
@@ -318,6 +325,8 @@ if (!over) return
           onDelete={handleArchive}
           onMoveTo={handleMoveTo}
         />
+          </>
+        )}
       </div>
 
       <DragOverlay dropAnimation={null}>

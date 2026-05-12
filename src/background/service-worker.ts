@@ -112,13 +112,13 @@ async function handleRanking(payload: RankCommentsPayload): Promise<object> {
     }
   }
 
-  // Normal/savage/indian: GIF comments skip AI and go to the GIF holding tier
+  // Normal/savage/indian: GIF comments skip AI but stay in the ranked tier flow.
   const gifComments = payload.comments.filter((c) => c.gifUrl)
   const textComments = payload.comments.filter((c) => !c.gifUrl)
 
   const gifRanked: RankedComment[] = gifComments.map((c) => ({
     ...c,
-    tier: "GIF" as Tier,
+    tier: "A" as Tier,
     locked: false,
   }))
 
