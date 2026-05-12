@@ -359,7 +359,6 @@ export default function App() {
       {/* Action bar */}
       <ActionBar
         rankingMode={rankingMode}
-        onModeChange={setRankingMode}
         onRerank={handleRerank}
         onAddComment={() => setShowAddModal(true)}
         onToggleSettings={() => setShowSettings((s) => !s)}

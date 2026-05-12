@@ -9,6 +9,12 @@ const TIER_COLOR: Record<Tier, string> = {
   S: "#FF6B35", A: "#39FF14", B: "#00B4FF",
   C: "#CC44FF", D: "#FFB300", F: "#FF1744", DRAFT: "#4a4a4a", GIF: "#FFD700",
 }
+// A tier (#39FF14) is pure green-screen green — swap it for overlay exports
+// so the chroma key doesn't eat the tier letter and pill border
+const TIER_COLOR_OVERLAY: Record<Tier, string> = {
+  ...TIER_COLOR,
+  A: "#FFE600",   // yellow — bright, distinct, not keyable
+}
 
 const INTRO_DUR   = 3.0
 const LABEL_DUR   = 0.8
@@ -226,6 +232,93 @@ function drawIntro(
   ctx.globalAlpha = 1
 }
 
+const LADDER_ORDER: Tier[] = ["S", "A", "B", "C", "D", "F"]
+
+function drawTierLadder(
+  ctx: CanvasRenderingContext2D,
+  currentTier: Tier,
+  progress: number,
+  overlay: boolean,
+) {
+  const colors = overlay ? TIER_COLOR_OVERLAY : TIER_COLOR
+  const BAR_H   = 72
+  const BAR_Y   = 272
+  const BAR_X   = 60
+  const BAR_W   = W - 120
+  const SLOT_W  = BAR_W / LADDER_ORDER.length
+
+  const alpha = easeOut(progress)
+  ctx.save()
+
+  // Bar fill — always full opacity in overlay mode so the black never becomes
+  // semi-transparent against the green screen (alpha < 1 would let green mix in,
+  // making pixels chroma-keyable when CapCut intensity is cranked up)
+  ctx.globalAlpha = overlay ? 1 : alpha * 0.88
+  ctx.fillStyle = overlay ? "#000000" : "#0a0a0a"
+  roundRect(ctx, BAR_X, BAR_Y, BAR_W, BAR_H, 14)
+  ctx.fill()
+
+  // Border
+  ctx.globalAlpha = overlay ? 0.35 : 0.06
+  ctx.strokeStyle = "#ffffff"
+  ctx.lineWidth = 1.5
+  roundRect(ctx, BAR_X, BAR_Y, BAR_W, BAR_H, 14)
+  ctx.stroke()
+
+  for (let i = 0; i < LADDER_ORDER.length; i++) {
+    const t         = LADDER_ORDER[i]
+    const isCurrent = t === currentTier
+    const color     = colors[t]
+    const cx        = BAR_X + SLOT_W * i + SLOT_W / 2
+    const cy        = BAR_Y + BAR_H / 2
+
+    if (isCurrent) {
+      const pillW = SLOT_W - 14
+      const pillH = BAR_H - 14
+      // Pill fill
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = color + "35"
+      roundRect(ctx, cx - pillW / 2, cy - pillH / 2, pillW, pillH, 8)
+      ctx.fill()
+      // Pill border ring — replaces glow, no bleed
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      roundRect(ctx, cx - pillW / 2, cy - pillH / 2, pillW, pillH, 8)
+      ctx.stroke()
+
+      // Letter — full color, no shadow
+      ctx.font = 'bold 50px "Bebas Neue", Impact, sans-serif'
+      ctx.fillStyle = color
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillText(t, cx, cy + 2)
+    } else {
+      // Letter — white, 70% overlay / 55% reel
+      ctx.globalAlpha = alpha * (overlay ? 0.7 : 0.55)
+      ctx.font = 'bold 36px "Bebas Neue", Impact, sans-serif'
+      ctx.fillStyle = "#ffffff"
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillText(t, cx, cy + 2)
+    }
+
+    // Divider between slots
+    if (i < LADDER_ORDER.length - 1) {
+      ctx.globalAlpha = alpha * 0.15
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(BAR_X + SLOT_W * (i + 1), BAR_Y + 14)
+      ctx.lineTo(BAR_X + SLOT_W * (i + 1), BAR_Y + BAR_H - 14)
+      ctx.stroke()
+    }
+  }
+
+  ctx.restore()
+  ctx.textAlign = "left"
+  ctx.textBaseline = "top"
+}
+
 function drawTierScene(
   ctx: CanvasRenderingContext2D,
   tier: Tier,
@@ -236,43 +329,55 @@ function drawTierScene(
   overlay = false,
   gifImgs?: Map<string, GifMedia>
 ) {
-  const color = TIER_COLOR[tier]
+  const color = (overlay ? TIER_COLOR_OVERLAY : TIER_COLOR)[tier]
 
   ctx.clearRect(0, 0, W, H)
   ctx.fillStyle = overlay ? GREEN_SCREEN : "#080808"
   ctx.fillRect(0, 0, W, H)
 
-  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, W)
-  glow.addColorStop(0, color + (overlay ? "30" : "1a"))
-  glow.addColorStop(1, "transparent")
-  ctx.fillStyle = glow
-  ctx.fillRect(0, 0, W, H)
+  // Glow + decorative elements — skipped in overlay mode because any
+  // semi-transparent color drawn over the green screen creates pixels with
+  // an elevated green channel that CapCut's chroma key removes as spill
+  if (!overlay) {
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, W)
+    glow.addColorStop(0, color + "1a")
+    glow.addColorStop(1, "transparent")
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 0, W, H)
+  }
 
-  // Big tier letter
+  // Big tier letter — overlay skips the semi-transparent shadow layer
   const lx = (1 - easeOut(labelProgress)) * -340
   ctx.save()
   ctx.translate(lx, 0)
   ctx.textBaseline = "top"
-  ctx.font = 'bold 280px "Bebas Neue", Impact, sans-serif'
-  ctx.fillStyle = color + "22"
-  ctx.fillText(tier, 30, 20)
+  if (!overlay) {
+    ctx.font = 'bold 280px "Bebas Neue", Impact, sans-serif'
+    ctx.fillStyle = color + "22"
+    ctx.fillText(tier, 30, 20)
+  }
   ctx.font = 'bold 220px "Bebas Neue", Impact, sans-serif'
   ctx.fillStyle = color
   ctx.fillText(tier, 50, 50)
   ctx.restore()
 
-  // Divider line
-  const div = ctx.createLinearGradient(60, 360, W - 60, 360)
-  div.addColorStop(0, color + "aa")
-  div.addColorStop(1, color + "00")
-  ctx.strokeStyle = div
-  ctx.lineWidth = 2
-  ctx.beginPath(); ctx.moveTo(60, 360); ctx.lineTo(W - 60, 360); ctx.stroke()
+  // Tier ladder
+  drawTierLadder(ctx, tier, labelProgress, overlay)
+
+  // Divider line — skip in overlay (semi-transparent over green = keyed pixels)
+  if (!overlay) {
+    const div = ctx.createLinearGradient(60, 380, W - 60, 380)
+    div.addColorStop(0, color + "aa")
+    div.addColorStop(1, color + "00")
+    ctx.strokeStyle = div
+    ctx.lineWidth = 2
+    ctx.beginPath(); ctx.moveTo(60, 380); ctx.lineTo(W - 60, 380); ctx.stroke()
+  }
 
   // Cards
   const PAD = 60
   const CARD_W = W - PAD * 2
-  let y = 400
+  let y = 420
 
   for (let i = 0; i < visibleCount; i++) {
     const h = drawCard(ctx, tierComments[i], PAD, y, CARD_W, color, 1, gifImgs)
@@ -422,7 +527,14 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
 
   async function loadElement(src: string, useVideo: boolean, mapKey: string): Promise<void> {
     await new Promise<void>(res => {
-      const done = () => res()
+      let settled = false
+      const done = () => { if (!settled) { settled = true; res() } }
+      // Hard cap — if neither onloadeddata nor onerror fires, don't hang forever
+      const timeout = setTimeout(() => {
+        console.warn(`[exportReel]     loadElement timeout src=${src.slice(0, 60)}`)
+        done()
+      }, 6000)
+
       if (useVideo) {
         const vid = document.createElement("video")
         vid.crossOrigin = "anonymous"
@@ -435,10 +547,12 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
           gifImgs.set(mapKey, vid)
           vid.play().catch(() => {})
           console.log(`[exportReel]     video onloadeddata vw=${vid.videoWidth}x${vid.videoHeight} src=${src.slice(0, 60)}`)
+          clearTimeout(timeout)
           done()
         }
         vid.onerror = () => {
           console.warn(`[exportReel]     video onerror src=${src.slice(0, 60)}`)
+          clearTimeout(timeout)
           done()
         }
         vid.src = src
@@ -451,10 +565,12 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
         img.onload = () => {
           gifImgs.set(mapKey, img)
           console.log(`[exportReel]     img onload nw=${img.naturalWidth}x${img.naturalHeight} src=${src.slice(0, 60)}`)
+          clearTimeout(timeout)
           setTimeout(done, 300)
         }
         img.onerror = () => {
           console.warn(`[exportReel]     img onerror src=${src.slice(0, 60)}`)
+          clearTimeout(timeout)
           done()
         }
         img.src = src

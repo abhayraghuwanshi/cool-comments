@@ -180,21 +180,39 @@ export function EmptyState({
           </p>
 
           {([
-            { mode: 'scrape'  as RankingMode, label: '📋 List',   color: '#888',    desc: 'No AI, just comments' },
-            { mode: 'default' as RankingMode, label: 'Normal',    color: '#ccc',    desc: 'Balanced' },
-            { mode: 'savage'  as RankingMode, label: '☠ Savage', color: '#FF1744', desc: 'Harsh verdicts' },
-            { mode: 'indian'  as RankingMode, label: '🇮🇳 Desi',  color: '#FF6B35', desc: 'Desi humor' },
-          ]).map(({ mode, label, color, desc }) => (
-            <button
-              key={mode}
-              onClick={() => onModeChange(mode)}
-              className="flex flex-col mb-1 text-left w-full px-1.5 py-1 rounded-sm transition-colors hover:bg-[#1a1a1a]"
-              style={{ outline: rankingMode === mode ? `1px solid ${color}30` : 'none', background: rankingMode === mode ? `${color}10` : undefined }}
-            >
-              <span className="font-ui text-[12px] font-bold leading-tight" style={{ color: rankingMode === mode ? color : '#666' }}>{label}</span>
-              <span className="font-mono text-[9px] text-[#555]">{desc}</span>
-            </button>
-          ))}
+            { mode: 'scrape'  as RankingMode, label: 'List',   color: '#888888', desc: 'No AI, just comments' },
+            { mode: 'default' as RankingMode, label: 'Normal', color: '#e0e0e0', desc: 'Balanced' },
+            { mode: 'savage'  as RankingMode, label: 'Savage', color: '#FF1744', desc: 'Harsh verdicts' },
+            { mode: 'indian'  as RankingMode, label: 'Desi',   color: '#FF9500', desc: 'Desi humor' },
+          ]).map(({ mode, label, color, desc }) => {
+            const isActive = rankingMode === mode
+            return (
+              <button
+                key={mode}
+                onClick={() => onModeChange(mode)}
+                className="relative flex flex-col mb-0.5 text-left w-full pl-3 pr-1.5 py-1.5 rounded-sm transition-all hover:bg-[#1a1a1a] overflow-hidden"
+                style={{ background: isActive ? `${color}0d` : undefined }}
+              >
+                {/* left accent bar */}
+                <span
+                  className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full transition-all"
+                  style={{ background: isActive ? color : "transparent" }}
+                />
+                <span
+                  className="font-ui text-[13px] font-bold leading-tight"
+                  style={{ color: isActive ? color : '#555' }}
+                >
+                  {label}
+                </span>
+                <span
+                  className="font-mono text-[9px] leading-tight mt-0.5"
+                  style={{ color: isActive ? `${color}88` : '#3a3a3a' }}
+                >
+                  {desc}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Right — Recent Reels */}
