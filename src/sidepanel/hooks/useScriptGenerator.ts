@@ -13,7 +13,8 @@ export function useScriptGenerator() {
       reelContext?: string
     ): Promise<ScriptResult> => {
       const TIERS: Tier[] = ["S", "A", "B", "C", "D", "F"]
-      const MAX_PER_TIER = 2  // keeps audio ~50s to match video length
+      // List mode sends a flat collection — use more comments since there's no tier spread
+      const MAX_PER_TIER = mode === "scrape" ? 8 : 2
       const byTier: Partial<Record<Tier, { text: string; username: string }[]>> = {}
       for (const c of comments) {
         const tier = (c.tier?.toUpperCase() ?? "") as Tier

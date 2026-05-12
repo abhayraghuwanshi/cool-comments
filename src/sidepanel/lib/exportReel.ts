@@ -624,9 +624,156 @@ function drawBatchScene(
   }
 }
 
+const OVERLAY_INTRO_DUR = 3.0
+const OVERLAY_OUTRO_DUR = 2.5
+
+function drawOverlayIntro(ctx: CanvasRenderingContext2D, username: string, progress: number) {
+  ctx.fillStyle = GREEN_SCREEN
+  ctx.fillRect(0, 0, W, H)
+
+  const CARD_X = 60
+  const CARD_Y = H / 2 - 200
+  const CARD_W = W - 120
+  const CARD_H = 400
+
+  const cardP  = Math.min(easeOut(progress * 2.8), 1)
+  const slideY = (1 - cardP) * 240
+
+  // Dark card slides up
+  ctx.save()
+  ctx.translate(0, slideY)
+  ctx.globalAlpha = cardP
+  ctx.fillStyle = "#0d0d0d"
+  roundRect(ctx, CARD_X, CARD_Y, CARD_W, CARD_H, 20)
+  ctx.fill()
+  // Orange accent bar grows downward
+  ctx.fillStyle = "#FF6B35"
+  ctx.fillRect(CARD_X, CARD_Y, 7, CARD_H * Math.min(easeOut(progress * 3.5), 1))
+  ctx.restore()
+
+  // "REVIEWING" — slides in from left
+  const revP = Math.min(easeOut(Math.max(progress * 4.5 - 0.5, 0)), 1)
+  ctx.save()
+  ctx.translate((1 - revP) * -320, slideY)
+  ctx.globalAlpha = revP * cardP
+  ctx.font = 'bold 66px "Bebas Neue", Impact, sans-serif'
+  ctx.fillStyle = "#666666"
+  ctx.textBaseline = "top"
+  ctx.fillText("REVIEWING", CARD_X + 28, CARD_Y + 36)
+  ctx.restore()
+
+  // "@username" — punch scale + orange glow
+  const userP  = Math.min(easeOut(Math.max(progress * 3.5 - 0.8, 0)), 1)
+  const scaleU = 0.5 + userP * 0.5
+  ctx.save()
+  ctx.translate(0, slideY)
+  ctx.globalAlpha = userP * cardP
+  ctx.translate(CARD_X + 28, CARD_Y + 135)
+  ctx.scale(scaleU, scaleU)
+  ctx.shadowColor = "#FF6B35"
+  ctx.shadowBlur = 36 * userP
+  ctx.font = 'bold 108px "Bebas Neue", Impact, sans-serif'
+  ctx.fillStyle = "#FF6B35"
+  ctx.textBaseline = "top"
+  ctx.fillText(`@${username}`, 0, 0)
+  ctx.restore()
+
+  // Divider line draws left to right
+  const divP = Math.min(easeOut(Math.max(progress * 5 - 2.0, 0)), 1)
+  if (divP > 0) {
+    ctx.save()
+    ctx.translate(0, slideY)
+    ctx.globalAlpha = divP * cardP * 0.45
+    ctx.strokeStyle = "#FF6B35"
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(CARD_X + 28, CARD_Y + 290)
+    ctx.lineTo(CARD_X + 28 + (CARD_W - 56) * divP, CARD_Y + 290)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // "comments" — fades in
+  const comP = Math.min(easeOut(Math.max(progress * 5 - 2.5, 0)), 1)
+  ctx.save()
+  ctx.translate(0, slideY)
+  ctx.globalAlpha = comP * cardP
+  ctx.font = '52px "Barlow Condensed", sans-serif'
+  ctx.fillStyle = "#cccccc"
+  ctx.textBaseline = "top"
+  ctx.fillText("comments", CARD_X + 28, CARD_Y + 308)
+  ctx.restore()
+}
+
+function drawOverlayOutro(ctx: CanvasRenderingContext2D, progress: number) {
+  ctx.fillStyle = GREEN_SCREEN
+  ctx.fillRect(0, 0, W, H)
+
+  const CARD_X = 60
+  const CARD_Y = H / 2 - 180
+  const CARD_W = W - 120
+  const CARD_H = 360
+
+  const cardP  = Math.min(easeOut(progress * 2.8), 1)
+  const slideY = (1 - cardP) * -220  // slides down from above
+
+  // Dark card slides down
+  ctx.save()
+  ctx.translate(0, slideY)
+  ctx.globalAlpha = cardP
+  ctx.fillStyle = "#0d0d0d"
+  roundRect(ctx, CARD_X, CARD_Y, CARD_W, CARD_H, 20)
+  ctx.fill()
+  ctx.fillStyle = "#FF6B35"
+  ctx.fillRect(CARD_X, CARD_Y, 7, CARD_H * Math.min(easeOut(progress * 3.5), 1))
+  ctx.restore()
+
+  // "reelranker" — punch scale + glow
+  const logoP  = Math.min(easeOut(Math.max(progress * 3.2 - 0.5, 0)), 1)
+  const scaleL = 0.5 + logoP * 0.5
+  ctx.save()
+  ctx.translate(0, slideY)
+  ctx.globalAlpha = logoP * cardP
+  ctx.translate(CARD_X + 28, CARD_Y + 75)
+  ctx.scale(scaleL, scaleL)
+  ctx.shadowColor = "#FF6B35"
+  ctx.shadowBlur = 42 * logoP
+  ctx.font = 'bold 118px "Bebas Neue", Impact, sans-serif'
+  ctx.fillStyle = "#FF6B35"
+  ctx.textBaseline = "top"
+  ctx.fillText("reelranker", 0, 0)
+  ctx.restore()
+
+  // Divider line draws left to right
+  const divP = Math.min(easeOut(Math.max(progress * 5 - 1.8, 0)), 1)
+  if (divP > 0) {
+    ctx.save()
+    ctx.translate(0, slideY)
+    ctx.globalAlpha = divP * cardP * 0.45
+    ctx.strokeStyle = "#FF6B35"
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(CARD_X + 28, CARD_Y + 240)
+    ctx.lineTo(CARD_X + 28 + (CARD_W - 56) * divP, CARD_Y + 240)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // "rank any reel's comments" — fades in
+  const subP = Math.min(easeOut(Math.max(progress * 5 - 2.2, 0)), 1)
+  ctx.save()
+  ctx.translate(0, slideY)
+  ctx.globalAlpha = subP * cardP
+  ctx.font = '50px "Barlow Condensed", sans-serif'
+  ctx.fillStyle = "#777777"
+  ctx.textBaseline = "top"
+  ctx.fillText("rank any reel's comments", CARD_X + 28, CARD_Y + 258)
+  ctx.restore()
+}
+
 // Green-screen overlay export — shows 3 comments at a time.
 // Use in CapCut: Overlay → Chroma Key → pick green → done.
-export async function exportOverlayVideo(comments: RankedComment[]): Promise<void> {
+export async function exportOverlayVideo(comments: RankedComment[], reelData?: ReelData): Promise<void> {
   await document.fonts.ready
 
   // Only show ranked comments (skip DRAFT and GIF tier)
@@ -643,7 +790,11 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
     batches.push(displayComments.slice(i, i + BATCH_SIZE))
   }
 
-  const totalDur = batches.length * BATCH_DUR
+  const commentsStart = OVERLAY_INTRO_DUR
+  const outroStart    = commentsStart + batches.length * BATCH_DUR
+  const totalDur      = outroStart + OVERLAY_OUTRO_DUR
+
+  const username = reelData?.username ?? "creator"
 
   const canvas = document.createElement("canvas")
   canvas.width = W; canvas.height = H
@@ -669,7 +820,7 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `cool-comments-overlay-${Date.now()}.${ext}`
+      a.download = `reelranker-overlay-${Date.now()}.${ext}`
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 5000)
       resolve()
@@ -682,13 +833,20 @@ export async function exportOverlayVideo(comments: RankedComment[]): Promise<voi
       const t = (Date.now() - startTime) / 1000
       if (t >= totalDur) {
         clearInterval(timerId)
-        ctx.clearRect(0, 0, W, H)
+        drawOverlayOutro(ctx, 1)
         setTimeout(() => recorder.stop(), 300)
         return
       }
-      const batchIdx = Math.min(Math.floor(t / BATCH_DUR), batches.length - 1)
-      const batchT   = t - batchIdx * BATCH_DUR
-      drawBatchScene(ctx, batches[batchIdx], batchT, gifImgs)
+
+      if (t < commentsStart) {
+        drawOverlayIntro(ctx, username, t / OVERLAY_INTRO_DUR)
+      } else if (t >= outroStart) {
+        drawOverlayOutro(ctx, (t - outroStart) / OVERLAY_OUTRO_DUR)
+      } else {
+        const batchIdx = Math.min(Math.floor((t - commentsStart) / BATCH_DUR), batches.length - 1)
+        const batchT   = (t - commentsStart) - batchIdx * BATCH_DUR
+        drawBatchScene(ctx, batches[batchIdx], batchT, gifImgs)
+      }
     }, 1000 / FPS)
   })
   cleanup()

@@ -1,11 +1,14 @@
 import type { RankedComment, ReelData, RankingMode, Tier } from "../../shared/messages"
 
+export type ReelStatus = "draft" | "completed" | "discarded"
+
 export interface SavedSession {
   reelUrl: string
   reelData: ReelData
   comments: RankedComment[]
   rankingMode: RankingMode
   savedAt: number
+  status: ReelStatus
 }
 
 const DB_NAME    = "cool-comments"
@@ -29,13 +32,29 @@ function openDB(): Promise<IDBDatabase> {
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
-export async function saveSession(session: Omit<SavedSession, "savedAt">): Promise<void> {
+export async function saveSession(session: Omit<SavedSession, "savedAt" | "status"> & { status?: ReelStatus }): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite")
-    tx.objectStore(STORE).put({ ...session, savedAt: Date.now() })
+    tx.objectStore(STORE).put({ status: "draft", ...session, savedAt: Date.now() })
     tx.oncomplete = () => resolve()
     tx.onerror    = () => reject(tx.error)
+  })
+}
+
+export async function updateSessionStatus(reelUrl: string, status: ReelStatus): Promise<void> {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(STORE, "readwrite")
+    const store = tx.objectStore(STORE)
+    const req   = store.get(reelUrl)
+    req.onsuccess = () => {
+      if (!req.result) return resolve()
+      store.put({ ...req.result, status })
+      tx.oncomplete = () => resolve()
+      tx.onerror    = () => reject(tx.error)
+    }
+    req.onerror = () => reject(req.error)
   })
 }
 
@@ -77,14 +96,14 @@ export async function deleteSession(reelUrl: string): Promise<void> {
   })
 }
 
-export async function listSessions(): Promise<Pick<SavedSession, "reelUrl" | "reelData" | "savedAt">[]> {
+export async function listSessions(): Promise<Pick<SavedSession, "reelUrl" | "reelData" | "savedAt" | "status">[]> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx  = db.transaction(STORE, "readonly")
     const req = tx.objectStore(STORE).getAll()
     req.onsuccess = () => {
-      const rows = (req.result as SavedSession[]).map(({ reelUrl, reelData, savedAt }) => ({
-        reelUrl, reelData, savedAt,
+      const rows = (req.result as SavedSession[]).map(({ reelUrl, reelData, savedAt, status }) => ({
+        reelUrl, reelData, savedAt, status: status ?? "draft" as ReelStatus,
       }))
       rows.sort((a, b) => b.savedAt - a.savedAt)
       resolve(rows)

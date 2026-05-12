@@ -216,6 +216,10 @@ async function handleScriptGeneration(payload: GenerateScriptPayload): Promise<o
 function buildScriptPrompt(payload: GenerateScriptPayload): string {
   const { reel, byTier, mode, reelContext } = payload
 
+  if (mode === "scrape") {
+    return buildListScriptPrompt(reel, byTier, reelContext)
+  }
+
   // Worst-to-best order — matches the video export reveal format
   const TIERS_ORDER: Tier[] = ["F", "D", "C", "B", "A", "S"]
 
@@ -230,6 +234,7 @@ function buildScriptPrompt(payload: GenerateScriptPayload): string {
     default: `You are a witty content creator who actually thinks about what comments mean. After reading a comment, you don't just react — you add a quick observation, joke, or callback that makes the viewer think "lmao exactly". Like a comedian doing crowd work but for comment sections.`,
     savage: `You are a ruthless roaster. After reading each bad comment, add a specific one-liner that burns what they said — not generic insults, actual jokes about the content of their comment. For good ones, add genuine disbelief like you can't believe someone actually wrote something smart.`,
     indian: `Full desi comedian energy. After reading each comment, add a quick observation in Indian internet style — reference engineering culture, Bollywood, Indian parent logic, or the "log kya kahenge" mindset when relevant. Use 'bhai', 'yaar', 'arre'. For a zoology or science comment, reference NEET/JEE. For gym content, reference "protein bro" culture. Make it feel like Indian Twitter reacting.`,
+    scrape: "",
   }
 
   return `You are writing a voiceover script for a viral Instagram short-form video — a comment tier list reveal.
@@ -265,6 +270,42 @@ Return ONLY a valid JSON array, tiers in F→S order, no markdown:
 [{"tier": "F", "text": "..."}, ..., {"tier": "S", "text": "..."}]
 
 Only include tiers that have comments. Tier keys must be uppercase single letters.`
+}
+
+function buildListScriptPrompt(
+  reel: ReelData,
+  byTier: Partial<Record<Tier, { text: string; username: string }[]>>,
+  reelContext?: string
+): string {
+  const TIERS_ORDER: Tier[] = ["S", "A", "B", "C", "D", "F"]
+  const allComments: { text: string; username: string }[] = []
+  for (const t of TIERS_ORDER) {
+    allComments.push(...(byTier[t] ?? []))
+  }
+
+  const commentLines = allComments
+    .map((c) => `  - "${c.text}" (@${c.username})`)
+    .join("\n")
+
+  return `You are writing a voiceover script for a short Instagram video where the creator reads and reacts to top comments on their reel.
+
+REEL: @${reel.username}
+CAPTION: "${reel.caption ?? ""}"${reelContext ? `\nCONTEXT: "${reelContext}"` : ""}
+
+TOP COMMENTS:
+${commentLines}
+
+SCRIPT RULES:
+1. Open with ONE punchy line that captures the vibe of the comment section.
+2. For EACH comment: read it in double quotes, then give ONE short punchy reaction specific to what it says.
+3. Use "..." for dramatic pauses.
+4. CAPS on words that need stress.
+5. Short sentences only. Never run-on.
+6. WORD BUDGET: entire script must be under 100 words. Be ruthless about cutting.
+7. NO tier mentions, hashtags, emojis, markdown, or filler phrases like "let's get into it".
+
+Return ONLY a valid JSON array with a single entry, no markdown:
+[{"tier": "A", "text": "...the full script..."}]`
 }
 
 function parseScriptResponse(text: string): { tier: Tier; text: string }[] {

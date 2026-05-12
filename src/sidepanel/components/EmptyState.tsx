@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react"
-import { listSessions, loadSession, deleteSession } from "../lib/db"
-import type { SavedSession } from "../lib/db"
+import { useState, useEffect, useRef } from "react"
+import { listSessions, loadSession, deleteSession, updateSessionStatus } from "../lib/db"
+import type { SavedSession, ReelStatus } from "../lib/db"
 import type { RankingMode } from "../../shared/messages"
 
 interface Props {
@@ -22,12 +22,26 @@ export function EmptyState({
   error, showSettings, onToggleSettings, apiKey, onApiKeyChange, openAiApiKey, onOpenAiApiKeyChange,
   onSaveApiKey, onScrape, onRestoreSession, rankingMode, onModeChange,
 }: Props) {
-  const [sessions, setSessions] = useState<Pick<SavedSession, "reelUrl" | "reelData" | "savedAt">[]>([])
+  const [sessions, setSessions] = useState<Pick<SavedSession, "reelUrl" | "reelData" | "savedAt" | "status">[]>([])
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null)
+  const [activeFilter, setActiveFilter] = useState<"all" | ReelStatus>("all")
+  const [statusPickerUrl, setStatusPickerUrl] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     listSessions().then(setSessions).catch(console.error)
   }, [])
+
+  useEffect(() => {
+    if (!statusPickerUrl) return
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setStatusPickerUrl(null)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [statusPickerUrl])
 
   const handleRestore = (url: string) => {
     setLoadingUrl(url)
@@ -42,6 +56,30 @@ export function EmptyState({
     deleteSession(url)
     setSessions((p) => p.filter((s) => s.reelUrl !== url))
   }
+
+  const handleStatusChange = (e: React.MouseEvent, url: string, status: ReelStatus) => {
+    e.stopPropagation()
+    updateSessionStatus(url, status).catch(console.error)
+    setSessions((p) => p.map((s) => s.reelUrl === url ? { ...s, status } : s))
+    setStatusPickerUrl(null)
+  }
+
+  const STATUS_META: Record<ReelStatus, { color: string; label: string }> = {
+    draft:     { color: "#666",    label: "Draft" },
+    completed: { color: "#39FF14", label: "Done" },
+    discarded: { color: "#FF1744", label: "Bin" },
+  }
+
+  const FILTERS: Array<{ key: "all" | ReelStatus; label: string }> = [
+    { key: "all",       label: "All" },
+    { key: "draft",     label: "Draft" },
+    { key: "completed", label: "Done" },
+    { key: "discarded", label: "Bin" },
+  ]
+
+  const visibleSessions = activeFilter === "all"
+    ? sessions
+    : sessions.filter((s) => s.status === activeFilter)
 
   const formatAge = (ts: number) => {
     const d = Date.now() - ts
@@ -161,65 +199,134 @@ export function EmptyState({
 
         {/* Right — Recent Reels */}
         <div className="flex-1 overflow-y-auto px-3 py-4">
-          <p className="font-ui text-[10px] font-bold tracking-[0.2em] text-[#666] uppercase mb-3">
-            Recent Reels
-          </p>
+
+          {/* Header + filter pills */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-ui text-[10px] font-bold tracking-[0.2em] text-[#666] uppercase">
+              Recent Reels
+            </p>
+            <div className="flex gap-1">
+              {FILTERS.map(({ key, label }) => {
+                const isActive = activeFilter === key
+                const dotColor = key === "all" ? undefined : STATUS_META[key as ReelStatus].color
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setActiveFilter(key)}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm font-mono text-[9px] tracking-wider transition-colors"
+                    style={{
+                      background: isActive ? "#1e1e1e" : "transparent",
+                      color: isActive ? (dotColor ?? "#FF6B35") : "#555",
+                      border: isActive ? `1px solid ${dotColor ?? "#FF6B35"}30` : "1px solid transparent",
+                    }}
+                  >
+                    {dotColor && (
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
+                    )}
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           {sessions.length > 0 ? (
-            <div className="flex flex-col gap-0.5">
-              {sessions.map((s) => (
-                <button
-                  key={s.reelUrl}
-                  onClick={() => handleRestore(s.reelUrl)}
-                  disabled={!!loadingUrl}
-                  className="group w-full text-left flex items-center gap-2.5 px-2 py-2 rounded-sm hover:bg-[#171717] transition-colors relative"
-                >
-                  {/* Orange accent on hover */}
-                  <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity bg-[#FF6B35]" />
+            visibleSessions.length > 0 ? (
+              <div className="flex flex-col gap-0.5">
+                {visibleSessions.map((s) => {
+                  const meta = STATUS_META[s.status ?? "draft"]
+                  return (
+                    <button
+                      key={s.reelUrl}
+                      onClick={() => handleRestore(s.reelUrl)}
+                      disabled={!!loadingUrl}
+                      className="group w-full text-left flex items-center gap-2.5 px-2 py-2 rounded-sm hover:bg-[#171717] transition-colors relative"
+                    >
+                      {/* Orange accent on hover */}
+                      <div className="absolute left-0 top-1 bottom-1 w-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity bg-[#FF6B35]" />
 
-                  {/* Avatar */}
-                  {s.reelData.profilePicUrl ? (
-                    <img
-                      src={s.reelData.profilePicUrl}
-                      alt=""
-                      className="w-7 h-7 rounded-full object-cover shrink-0"
-                      style={{ border: '1px solid #333' }}
-                    />
-                  ) : (
-                    <div className="w-7 h-7 rounded-full bg-[#222] shrink-0 flex items-center justify-center font-display text-[11px] text-[#555]">
-                      {s.reelData.username?.[0]?.toUpperCase() ?? '?'}
-                    </div>
-                  )}
+                      {/* Avatar */}
+                      {s.reelData.profilePicUrl ? (
+                        <img
+                          src={s.reelData.profilePicUrl}
+                          alt=""
+                          className="w-7 h-7 rounded-full object-cover shrink-0"
+                          style={{ border: '1px solid #333' }}
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-[#222] shrink-0 flex items-center justify-center font-display text-[11px] text-[#555]">
+                          {s.reelData.username?.[0]?.toUpperCase() ?? '?'}
+                        </div>
+                      )}
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-ui text-[13px] font-bold text-[#aaa] group-hover:text-white transition-colors leading-tight truncate">
-                      {s.reelData.username ? `@${s.reelData.username}` : 'Unknown reel'}
-                    </p>
-                    {s.reelData.caption && (
-                      <p className="font-mono text-[10px] text-[#555] group-hover:text-[#777] transition-colors truncate mt-0.5 leading-none">
-                        {s.reelData.caption}
-                      </p>
-                    )}
-                    <p className="font-mono text-[9px] text-[#444] mt-0.5">{formatAge(s.savedAt)}</p>
-                  </div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-ui text-[13px] font-bold text-[#aaa] group-hover:text-white transition-colors leading-tight truncate">
+                          {s.reelData.username ? `@${s.reelData.username}` : 'Unknown reel'}
+                        </p>
+                        {s.reelData.caption && (
+                          <p className="font-mono text-[10px] text-[#555] group-hover:text-[#777] transition-colors truncate mt-0.5 leading-none">
+                            {s.reelData.caption}
+                          </p>
+                        )}
+                        <p className="font-mono text-[9px] text-[#444] mt-0.5">{formatAge(s.savedAt)}</p>
+                      </div>
 
-                  {/* Loading / delete */}
-                  <div className="shrink-0">
-                    {loadingUrl === s.reelUrl ? (
-                      <div className="w-3 h-3 border border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <button
-                        onClick={(e) => handleDelete(e, s.reelUrl)}
-                        className="font-mono text-[10px] text-[#333] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
+                      {/* Status dot + loading/delete */}
+                      <div className="shrink-0 flex items-center gap-1.5">
+                        {/* Status picker */}
+                        <div className="relative" ref={statusPickerUrl === s.reelUrl ? pickerRef : undefined}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setStatusPickerUrl(statusPickerUrl === s.reelUrl ? null : s.reelUrl)
+                            }}
+                            title={meta.label}
+                            className="w-2 h-2 rounded-full transition-transform hover:scale-125 opacity-60 group-hover:opacity-100"
+                            style={{ background: meta.color }}
+                          />
+                          {statusPickerUrl === s.reelUrl && (
+                            <div
+                              className="absolute right-0 bottom-5 flex gap-1.5 px-2 py-1.5 rounded-sm z-10"
+                              style={{ background: "#1a1a1a", border: "1px solid #333" }}
+                            >
+                              {(["draft", "completed", "discarded"] as ReelStatus[]).map((st) => (
+                                <button
+                                  key={st}
+                                  onClick={(e) => handleStatusChange(e, s.reelUrl, st)}
+                                  title={STATUS_META[st].label}
+                                  className="w-3 h-3 rounded-full transition-transform hover:scale-125"
+                                  style={{
+                                    background: STATUS_META[st].color,
+                                    outline: s.status === st ? `2px solid ${STATUS_META[st].color}` : "none",
+                                    outlineOffset: "2px",
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {loadingUrl === s.reelUrl ? (
+                          <div className="w-3 h-3 border border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <button
+                            onClick={(e) => handleDelete(e, s.reelUrl)}
+                            className="font-mono text-[10px] text-[#333] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="font-mono text-[11px] text-[#555] mt-6">
+                No {STATUS_META[activeFilter as ReelStatus]?.label.toLowerCase()} reels.
+              </p>
+            )
           ) : (
             <div className="flex flex-col gap-3 mt-6">
               <div className="flex gap-1.5">
