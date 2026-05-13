@@ -1,40 +1,26 @@
-[exportReel] mode=default isListMode=false input=60
-index.html-C1_RxiQg.js:40 [exportReel] byTier counts: Object
-index.html-C1_RxiQg.js:40 [exportReel] rankedComments=12 withGif=3
-index.html-C1_RxiQg.js:40   ranked: @_devil_heart_6150 tier=A gifUrl=https://cdn.fbsbx.com/v/t59.2708-21/660785880_1476658564206206_3029925773247887210_n.gif?_nc_cat=1&c
-index.html-C1_RxiQg.js:40   ranked: @yash_yours_truly tier=A gifUrl=https://cdn.fbsbx.com/v/t59.2708-21/468019849_932112128280528_6329556307685607696_n.gif?_nc_cat=106&
-index.html-C1_RxiQg.js:40   ranked: @thisishita_singh tier=S gifUrl=https://cdn.fbsbx.com/v/t59.2708-21/628853071_4348913008685718_3251484018544799683_n.gif?_nc_cat=1&c
-index.html-C1_RxiQg.js:40 [exportReel] loadGifImgs: 12 comments, 3 unique gifUrls
-index.html-C1_RxiQg.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/660785880_1476658564206206_3029925773247887210_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd6
-index.html-C1_RxiQg.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/468019849_932112128280528_6329556307685607696_n.gif?_nc_cat=106&ccb=1-7&_nc_sid=9dcd
-index.html-C1_RxiQg.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/628853071_4348913008685718_3251484018544799683_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd6
-
-index.html-C1_RxiQg.js:40 [exportReel]     img onerror src=https://cdn.fbsbx.com/v/t59.2708-21/660785880_14766585642062
-
-index.html-C1_RxiQg.js:40 [exportReel]     img onerror src=https://cdn.fbsbx.com/v/t59.2708-21/468019849_93211212828052
-index.html-C1_RxiQg.js:40 [exportReel]     img onerror src=https://cdn.fbsbx.com/v/t59.2708-21/628853071_43489130086857
-index.html-C1_RxiQg.js:40 [exportReel] loadGifImgs done: 0/3 loaded
-index.html-C1_RxiQg.js:40 [exportReel] GIF fallback to text for @_devil_heart_6150 
-Object
-gifUrl
-: 
-"https://cdn.fbsbx.com/v/t59.2708-21/660785880_1476658564206206_3029925773247887210_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd69&_nc_ohc=yVFV2vnFV4UQ7kNvwHrpw57&_nc_oc=Adpid8Wd-jhyLt-rMnlDAyTHhimIu18fmYTCqli6gOmpd07A2fSDK05L3rMlQv1PocRv5olKPyFMbhl3CTZZOgLk&_nc_zt=7&_nc_ht=cdn.fbsbx.com&_nc_gid=Xge0NBcz6xSTF51foQe5dw&_nc_ss=7b689&oh=03_Q7cD5QH4eeOLspkOzbNJmZ-5Xp_7e8kdpGzdMoOMmArVV7bS-A&oe=6A04EC8F"
-kind
-: 
-"missing"
-mapHas
-: 
-false
-mapSize
-: 
-0
-w
-: 
-0
-[[Prototype]]
-: 
-Object
-index.html-C1_RxiQg.js:40 [exportReel] GIF fallback to text for @yash_yours_truly 
-Object
-index.html-C1_RxiQg.js:40 [exportReel] GIF fallback to text for @thisishita_singh 
-Object
+[exportReel] loadGifImgs: 23 comments, 6 unique gifUrls
+index.html-DnyIZRmt.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/660632926_962541079761628_5615805899212360665_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd69
+index.html-DnyIZRmt.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/587021776_823788883600190_7349115669026466957_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd69
+index.html-DnyIZRmt.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/518185416_721456124212724_2208202615489868100_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd69
+index.html-DnyIZRmt.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/470091544_1672878546940332_8101029862153910571_n.gif?_nc_cat=105&ccb=1-7&_nc_sid=9dc
+index.html-DnyIZRmt.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/664545398_959448699937314_3560840444429767407_n.gif?_nc_cat=105&ccb=1-7&_nc_sid=9dcd
+index.html-DnyIZRmt.js:40   → https://cdn.fbsbx.com/v/t59.2708-21/676783916_743481552092338_7420039664187148562_n.gif?_nc_cat=1&ccb=1-7&_nc_sid=9dcd69
+index.html-DnyIZRmt.js:40 [exportReel]   decode failed, falling back to hidden <img> (will likely be one frame) for https://cdn.fbsbx.com/v/t59.2708-21/660632926_962541079761628_561580589921236066
+(anonymous) @ index.html-DnyIZRmt.js:40Understand this warning
+index.html-DnyIZRmt.js:40 [exportReel]   decode failed, falling back to hidden <img> (will likely be one frame) for https://cdn.fbsbx.com/v/t59.2708-21/587021776_823788883600190_734911566902646695
+(anonymous) @ index.html-DnyIZRmt.js:40Understand this warning
+index.html-DnyIZRmt.js:40 [exportReel]     img onload nw=300x200 src=blob:chrome-extension://dhnmimfmknigbikllmeoomofojoaepbo/624
+index.html-DnyIZRmt.js:40 [exportReel]     img onload nw=200x200 src=blob:chrome-extension://dhnmimfmknigbikllmeoomofojoaepbo/8d5
+index.html-DnyIZRmt.js:40 [exportReel]   decode failed, falling back to hidden <img> (will likely be one frame) for https://cdn.fbsbx.com/v/t59.2708-21/664545398_959448699937314_356084044442976740
+(anonymous) @ index.html-DnyIZRmt.js:40Understand this warning
+index.html-DnyIZRmt.js:40 [exportReel]   decode failed, falling back to hidden <img> (will likely be one frame) for https://cdn.fbsbx.com/v/t59.2708-21/676783916_743481552092338_742003966418714856
+(anonymous) @ index.html-DnyIZRmt.js:40Understand this warning
+index.html-DnyIZRmt.js:40 [exportReel]   decode failed, falling back to hidden <img> (will likely be one frame) for https://cdn.fbsbx.com/v/t59.2708-21/470091544_1672878546940332_81010298621539105
+(anonymous) @ index.html-DnyIZRmt.js:40Understand this warning
+index.html-DnyIZRmt.js:40 [exportReel]     img onload nw=300x200 src=blob:chrome-extension://dhnmimfmknigbikllmeoomofojoaepbo/9a1
+index.html-DnyIZRmt.js:40 [exportReel]   decode failed, falling back to hidden <img> (will likely be one frame) for https://cdn.fbsbx.com/v/t59.2708-21/518185416_721456124212724_220820261548986810
+(anonymous) @ index.html-DnyIZRmt.js:40Understand this warning
+index.html-DnyIZRmt.js:40 [exportReel]     img onload nw=200x200 src=blob:chrome-extension://dhnmimfmknigbikllmeoomofojoaepbo/4b2
+index.html-DnyIZRmt.js:40 [exportReel]     img onload nw=200x200 src=blob:chrome-extension://dhnmimfmknigbikllmeoomofojoaepbo/c9b
+index.html-DnyIZRmt.js:40 [exportReel]     img onload nw=356x200 src=blob:chrome-extension://dhnmimfmknigbikllmeoomofojoaepbo/a4a
+index.html-DnyIZRmt.js:40 [exportReel] loadGifImgs done: 6/6 loaded

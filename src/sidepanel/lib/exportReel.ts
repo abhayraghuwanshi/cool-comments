@@ -60,7 +60,27 @@ const T_SIZE     = 40   // comment text font size
 const T_LINE     = 56   // comment text line height
 const L_SIZE     = 28   // likes font size
 
-type GifMedia = HTMLImageElement | HTMLVideoElement
+// Frame-by-frame GIF decoded ahead of time via WebCodecs ImageDecoder.
+// HTMLImageElement GIFs only animate when in-viewport and the page is actively
+// repainting — neither is true for off-screen comments during a long export, so
+// ctx.drawImage(img) freezes to one frame. Decoding to bitmaps lets us look up
+// the correct frame by elapsed wall time on every export tick.
+type GifFrameSet = {
+  __kind: "frames"
+  width: number
+  height: number
+  frames: ImageBitmap[]
+  durations: number[]   // ms per frame
+  totalDuration: number // ms
+  startTime: number     // performance.now() at decode
+  close: () => void
+}
+
+type GifMedia = HTMLImageElement | HTMLVideoElement | GifFrameSet
+
+function isFrameSet(m: GifMedia): m is GifFrameSet {
+  return (m as GifFrameSet).__kind === "frames"
+}
 
 const drawCardLogged = new Set<string>()
 
@@ -80,12 +100,86 @@ function isDrawableMedia(contentType: string): boolean {
 
 function mediaDims(m: GifMedia): { nw: number; nh: number } {
   if (m instanceof HTMLVideoElement) return { nw: m.videoWidth || 200, nh: m.videoHeight || 200 }
+  if (isFrameSet(m)) return { nw: m.width || 200, nh: m.height || 200 }
   return { nw: m.naturalWidth || 200, nh: m.naturalHeight || 200 }
+}
+
+function mediaReady(m: GifMedia): boolean {
+  if (m instanceof HTMLVideoElement) return m.videoWidth > 0
+  if (isFrameSet(m)) return m.frames.length > 0
+  return m.naturalWidth > 0
+}
+
+function currentFrameOf(set: GifFrameSet): ImageBitmap {
+  const t = (performance.now() - set.startTime) % set.totalDuration
+  let acc = 0
+  for (let i = 0; i < set.frames.length; i++) {
+    acc += set.durations[i]
+    if (t < acc) return set.frames[i]
+  }
+  return set.frames[set.frames.length - 1]
+}
+
+function mediaDrawable(m: GifMedia): CanvasImageSource {
+  if (isFrameSet(m)) return currentFrameOf(m)
+  return m
 }
 
 function gifContentHeight(innerW: number, m: GifMedia): number {
   const { nw, nh } = mediaDims(m)
   return Math.round(nh * Math.min(innerW / nw, 320 / nh))
+}
+
+// Decode an animated GIF blob into an array of ImageBitmaps with per-frame
+// durations. Returns null if WebCodecs isn't available or the data isn't
+// decodable (single-frame images return frame[0] with the full intended duration).
+async function decodeGifFrames(blob: Blob, contentType: string): Promise<GifFrameSet | null> {
+  const Decoder = (globalThis as { ImageDecoder?: new (init: { data: ArrayBuffer | ArrayBufferView | Blob | ReadableStream; type: string }) => {
+    completed: Promise<void>
+    tracks: { selectedTrack: { frameCount: number } | null }
+    decode: (opts: { frameIndex: number }) => Promise<{ image: VideoFrame }>
+  } }).ImageDecoder
+  if (!Decoder) { console.warn("[exportReel] decode: ImageDecoder not in globalThis"); return null }
+  try {
+    // Some Chrome builds reject Blob here; the spec accepts ArrayBuffer or
+    // ReadableStream. Use the underlying ArrayBuffer — finite, no streaming
+    // bookkeeping, simplest path to `completed`.
+    const buffer = await blob.arrayBuffer()
+    const decoder = new Decoder({ data: buffer, type: contentType || blob.type || "image/gif" })
+    // `tracks.ready` resolves once track metadata is parsed; `completed` waits
+    // for full decode. Await both so frameCount is valid before iterating.
+    const tracksAny = decoder.tracks as unknown as { ready?: Promise<void> }
+    if (tracksAny.ready) await tracksAny.ready
+    await decoder.completed
+    const track = decoder.tracks.selectedTrack
+    if (!track) { console.warn(`[exportReel] decode: no selectedTrack (type=${contentType})`); return null }
+    if (track.frameCount < 1) { console.warn(`[exportReel] decode: frameCount=${track.frameCount}`); return null }
+    const frames: ImageBitmap[] = []
+    const durations: number[] = []
+    let width = 0, height = 0
+    for (let i = 0; i < track.frameCount; i++) {
+      const { image } = await decoder.decode({ frameIndex: i })
+      width = image.displayWidth
+      height = image.displayHeight
+      const bm = await createImageBitmap(image)
+      frames.push(bm)
+      // VideoFrame.duration is microseconds; GIFs commonly default to ~100ms
+      const durUs = (image.duration as number | null) ?? 100000
+      durations.push(durUs / 1000)
+      image.close()
+    }
+    const totalDuration = durations.reduce((a, b) => a + b, 0) || 100
+    return {
+      __kind: "frames",
+      width, height,
+      frames, durations, totalDuration,
+      startTime: performance.now(),
+      close: () => { for (const f of frames) f.close() },
+    }
+  } catch (e) {
+    console.warn(`[exportReel] decodeGifFrames failed: ${(e as Error).message}`)
+    return null
+  }
 }
 
 function drawCard(
@@ -101,13 +195,17 @@ function drawCard(
   const uLines = wrapText(ctx, `@${comment.username}`, innerW)
 
   const gifMedia = comment.gifUrl ? gifImgs?.get(comment.gifUrl) : undefined
-  const hasGif = !!gifMedia && (
-    gifMedia instanceof HTMLVideoElement ? gifMedia.videoWidth > 0 : (gifMedia as HTMLImageElement).naturalWidth > 0
-  )
+  const hasGif = !!gifMedia && mediaReady(gifMedia)
   if (comment.gifUrl && !hasGif && !drawCardLogged.has(comment.gifUrl)) {
     drawCardLogged.add(comment.gifUrl)
-    const kind = gifMedia instanceof HTMLVideoElement ? "video" : gifMedia instanceof HTMLImageElement ? "image" : "missing"
-    const w = gifMedia instanceof HTMLVideoElement ? gifMedia.videoWidth : gifMedia instanceof HTMLImageElement ? gifMedia.naturalWidth : 0
+    const kind = gifMedia instanceof HTMLVideoElement ? "video"
+      : gifMedia instanceof HTMLImageElement ? "image"
+      : gifMedia && isFrameSet(gifMedia) ? "frames"
+      : "missing"
+    const w = gifMedia instanceof HTMLVideoElement ? gifMedia.videoWidth
+      : gifMedia instanceof HTMLImageElement ? gifMedia.naturalWidth
+      : gifMedia && isFrameSet(gifMedia) ? gifMedia.width
+      : 0
     console.warn(`[exportReel] GIF fallback to text for @${comment.username}`, { gifUrl: comment.gifUrl, mapHas: gifImgs?.has(comment.gifUrl), kind, w, mapSize: gifImgs?.size })
   }
 
@@ -140,7 +238,7 @@ function drawCard(
     const { nw, nh } = mediaDims(gifMedia!)
     const scale = Math.min(innerW / nw, 320 / nh)
     const dw = Math.round(nw * scale), dh = Math.round(nh * scale)
-    ctx.drawImage(gifMedia! as CanvasImageSource, tx + Math.round((innerW - dw) / 2), cy, dw, dh)
+    ctx.drawImage(mediaDrawable(gifMedia!), tx + Math.round((innerW - dw) / 2), cy, dw, dh)
   } else {
     const isGifOnly = comment.gifUrl && comment.text === "[GIF]"
     ctx.font = isGifOnly ? `italic ${T_SIZE}px "Courier New", monospace` : `${T_SIZE}px "Courier New", monospace`
@@ -248,6 +346,11 @@ function drawTierLadder(
   const SLOT_W  = BAR_W / LADDER_ORDER.length
 
   const alpha = easeOut(progress)
+  // First frame has alpha=0 → skip entirely. In overlay mode the bar fill is
+  // full-opacity black regardless of alpha, so without this guard frame-0
+  // renders a blank black rectangle (bar with no letters) for one frame.
+  if (alpha < 0.01) return
+
   ctx.save()
 
   // Bar fill — always full opacity in overlay mode so the black never becomes
@@ -435,7 +538,7 @@ function drawListScene(
     ctx.font = `bold ${U_SIZE}px "Courier New", monospace`
     const uH = wrapText(ctx, `@${comment.username}`, innerW).length * U_LINE
     const gm = comment.gifUrl ? gifImgs?.get(comment.gifUrl) : undefined
-    const gmReady = gm && (gm instanceof HTMLVideoElement ? gm.videoWidth > 0 : (gm as HTMLImageElement).naturalWidth > 0)
+    const gmReady = !!gm && mediaReady(gm)
     const contentH = gmReady
       ? gifContentHeight(innerW, gm!)
       : (() => { ctx.font = `${T_SIZE}px "Courier New", monospace`; return wrapText(ctx, comment.text, innerW).length * T_LINE })()
@@ -482,12 +585,13 @@ function loadImg(src: string): Promise<HTMLImageElement | null> {
 }
 
 // Extension pages share host_permissions — fetch directly from the sidepanel.
-// Returns a same-origin blob URL that never taints the canvas.
-async function fetchMediaBlobUrl(url: string): Promise<{ blobUrl: string; contentType: string } | null> {
-  const fromBuffer = (buffer: ArrayBuffer, contentType: string) => {
-    const blob = new Blob([buffer], { type: contentType })
-    return { blobUrl: URL.createObjectURL(blob), contentType }
-  }
+// Returns the raw blob + contentType so callers can either decode frames or
+// build a same-origin blob URL (no canvas taint either way).
+async function fetchMediaBlob(url: string): Promise<{ blob: Blob; contentType: string } | null> {
+  const fromBuffer = (buffer: ArrayBuffer, contentType: string) => ({
+    blob: new Blob([buffer], { type: contentType }),
+    contentType,
+  })
 
   try {
     const resp = await Promise.race([
@@ -510,9 +614,11 @@ async function fetchMediaBlobUrl(url: string): Promise<{ blobUrl: string; conten
   }
 }
 
-// Loads GIF/media as blob-URL-backed elements so ctx.drawImage() never taints
-// the canvas. Prefer video for Giphy GIFs because hidden HTMLImageElement GIFs
-// are easy for Chrome to throttle/freeze, which records only one frame.
+// Loads GIF/media so ctx.drawImage() can sample animated frames. Order per URL:
+// (1) videos go through hidden <video> (plays reliably while recording);
+// (2) image GIFs go through ImageDecoder → frame bitmaps (animation driven by
+//     wall clock in drawCard, immune to DOM-paint throttling);
+// (3) on ImageDecoder failure, fall back to the legacy hidden-<img> path.
 async function loadGifImgs(comments: RankedComment[]): Promise<{
   gifImgs: Map<string, GifMedia>
   cleanup: () => void
@@ -521,6 +627,7 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
   const gifImgs = new Map<string, GifMedia>()
   const nodes: (HTMLImageElement | HTMLVideoElement)[] = []
   const blobUrls: string[] = []
+  const frameSets: GifFrameSet[] = []
   const urls = [...new Set(comments.map(c => c.gifUrl).filter(Boolean) as string[])]
   console.log(`[exportReel] loadGifImgs: ${comments.length} comments, ${urls.length} unique gifUrls`)
   for (const u of urls) console.log(`  → ${u.slice(0, 120)}`)
@@ -579,12 +686,13 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
   }
 
   await Promise.all(urls.map(async (url) => {
-    // Fetch via extension host_permissions — returns same-origin blob URL (no canvas taint)
-    // For Giphy image GIFs, try the equivalent MP4 first so export samples a playing video.
+    // Fetch the bytes once via extension host_permissions.
+    // For Giphy image GIFs, prefer the .mp4 sibling — videos animate reliably
+    // through MediaRecorder, so we keep the existing <video> path for those.
     const candidates = [...gifVideoCandidates(url), url]
-    let media: { blobUrl: string; contentType: string } | null = null
+    let media: { blob: Blob; contentType: string } | null = null
     for (const candidate of candidates) {
-      media = await fetchMediaBlobUrl(candidate)
+      media = await fetchMediaBlob(candidate)
       if (media) break
     }
     if (!media) {
@@ -592,16 +700,38 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
       return
     }
 
-    const { blobUrl, contentType } = media
-    blobUrls.push(blobUrl)
-    await loadElement(blobUrl, contentType.startsWith("video/"), url)
-    console.log(`[exportReel]   blob loaded (${contentType}) → mapHas=${gifImgs.has(url)} for ${url.slice(0, 80)}`)
+    const { blob, contentType } = media
 
-    // If the blob-backed load failed silently, fall back to a direct URL load.
-    if (!gifImgs.has(url)) {
-      console.warn(`[exportReel]   blob load did not register; trying direct URL`)
-      await loadElement(url, looksLikeVideo(url), url)
+    if (contentType.startsWith("video/")) {
+      const blobUrl = URL.createObjectURL(blob)
+      blobUrls.push(blobUrl)
+      await loadElement(blobUrl, true, url)
+      console.log(`[exportReel]   blob video loaded (${contentType}) → mapHas=${gifImgs.has(url)} for ${url.slice(0, 80)}`)
+      if (!gifImgs.has(url)) {
+        console.warn(`[exportReel]   video blob load did not register; trying direct URL`)
+        await loadElement(url, looksLikeVideo(url), url)
+      }
+      return
     }
+
+    // Image GIF: decode every frame to ImageBitmaps so drawCard can pick the
+    // right frame by wall time. This is the only path that survives Chrome's
+    // off-viewport / non-painting throttle and actually animates in the export.
+    const set = await decodeGifFrames(blob, contentType)
+    if (set) {
+      gifImgs.set(url, set)
+      frameSets.push(set)
+      console.log(`[exportReel]   decoded ${set.frames.length} frames totalDur=${Math.round(set.totalDuration)}ms ${set.width}x${set.height} for ${url.slice(0, 80)}`)
+      return
+    }
+
+    // Fallback — should be rare, but keeps single-frame display if WebCodecs
+    // declines (e.g. unusual GIF variant). Animation will be frozen here.
+    console.warn(`[exportReel]   decode failed, falling back to hidden <img> (will likely be one frame) for ${url.slice(0, 80)}`)
+    const blobUrl = URL.createObjectURL(blob)
+    blobUrls.push(blobUrl)
+    await loadElement(blobUrl, false, url)
+    if (!gifImgs.has(url)) await loadElement(url, false, url)
   }))
   console.log(`[exportReel] loadGifImgs done: ${gifImgs.size}/${urls.length} loaded`)
 
@@ -610,6 +740,7 @@ async function loadGifImgs(comments: RankedComment[]): Promise<{
     cleanup: () => {
       nodes.forEach(n => n.remove())
       blobUrls.forEach(u => URL.revokeObjectURL(u))
+      frameSets.forEach(s => s.close())
     },
   }
 }
@@ -782,7 +913,7 @@ function drawBatchScene(
     ctx.font = `bold ${U_SIZE}px "Courier New", monospace`
     const uH = wrapText(ctx, `@${c.username}`, innerW).length * U_LINE
     const gm = c.gifUrl ? gifImgs?.get(c.gifUrl) : undefined
-    const gmReady = gm && (gm instanceof HTMLVideoElement ? gm.videoWidth > 0 : (gm as HTMLImageElement).naturalWidth > 0)
+    const gmReady = !!gm && mediaReady(gm)
     const contentH = gmReady
       ? gifContentHeight(innerW, gm!)
       : (() => { ctx.font = `${T_SIZE}px "Courier New", monospace`; return wrapText(ctx, c.text, innerW).length * T_LINE })()
@@ -804,6 +935,11 @@ function drawBatchScene(
 
 const OVERLAY_INTRO_DUR = 3.0
 const OVERLAY_OUTRO_DUR = 2.5
+// Pre-roll: 1.5s of pure green at the start so the H.264 codec stabilises
+// its color profile before real content begins. Without this, chroma key
+// keying is unstable for ~2s and creates fringe artifacts in CapCut.
+// User trims this off after applying chroma key (it's just empty/transparent).
+const OVERLAY_PREROLL_DUR = 1.5
 
 function drawOverlayIntro(ctx: CanvasRenderingContext2D, username: string, progress: number) {
   ctx.fillStyle = GREEN_SCREEN
@@ -991,7 +1127,7 @@ export async function exportOverlayVideo(
   }
 
   const tierStarts: number[] = []
-  let cursor = OVERLAY_INTRO_DUR
+  let cursor = OVERLAY_PREROLL_DUR + OVERLAY_INTRO_DUR
   if (isListMode) {
     cursor += batches.length * BATCH_DUR
   } else {
@@ -1001,7 +1137,8 @@ export async function exportOverlayVideo(
     }
   }
 
-  const commentsStart = OVERLAY_INTRO_DUR
+  const introStart    = OVERLAY_PREROLL_DUR
+  const commentsStart = OVERLAY_PREROLL_DUR + OVERLAY_INTRO_DUR
   const outroStart    = cursor
   const totalDur      = outroStart + OVERLAY_OUTRO_DUR
 
@@ -1049,8 +1186,13 @@ export async function exportOverlayVideo(
         return
       }
 
-      if (t < commentsStart) {
-        drawOverlayIntro(ctx, username, t / OVERLAY_INTRO_DUR)
+      if (t < introStart) {
+        // Pre-roll — pure green so the codec stabilises before real content
+        ctx.clearRect(0, 0, W, H)
+        ctx.fillStyle = GREEN_SCREEN
+        ctx.fillRect(0, 0, W, H)
+      } else if (t < commentsStart) {
+        drawOverlayIntro(ctx, username, (t - introStart) / OVERLAY_INTRO_DUR)
       } else if (t >= outroStart) {
         drawOverlayOutro(ctx, (t - outroStart) / OVERLAY_OUTRO_DUR)
       } else if (isListMode) {
