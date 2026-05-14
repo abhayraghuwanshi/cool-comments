@@ -1,4 +1,5 @@
 import type { RankedComment, RankingMode, ReelData, Tier } from "../../shared/messages"
+import { ensureOptionalHostPermissions } from "../../shared/optional-permissions"
 
 const W   = 1080
 const H   = 1920
@@ -584,9 +585,10 @@ function loadImg(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
-// Extension pages share host_permissions — fetch directly from the sidepanel.
-// Returns the raw blob + contentType so callers can either decode frames or
-// build a same-origin blob URL (no canvas taint either way).
+// Extension pages share host_permissions with the service worker, so once
+// ensureOptionalHostPermissions has granted the CDN origin we can fetch from
+// either context. Returns the raw blob + contentType so callers can decode
+// frames or build a same-origin blob URL (no canvas taint either way).
 async function fetchMediaBlob(url: string): Promise<{ blob: Blob; contentType: string } | null> {
   const fromBuffer = (buffer: ArrayBuffer, contentType: string) => ({
     blob: new Blob([buffer], { type: contentType }),
@@ -750,6 +752,19 @@ export async function exportReelVideo(
   comments: RankedComment[],
   rankingMode?: RankingMode,
 ): Promise<void> {
+  // Request CDN host permissions FIRST — chrome.permissions.request requires
+  // an active user gesture, which we still have on the first awaited call from
+  // the export click handler. Denial just degrades GIFs to text cards.
+  const mediaUrls = [
+    ...comments.map((c) => c.gifUrl).filter((u): u is string => !!u),
+    reelData.thumbnailUrl,
+    reelData.profilePicUrl,
+  ].filter((u): u is string => !!u)
+  if (mediaUrls.length > 0) {
+    const granted = await ensureOptionalHostPermissions(mediaUrls)
+    if (!granted) console.warn("[exportReel] CDN host permission denied — GIFs/thumbnails will fall back")
+  }
+
   await document.fonts.ready
   const isListMode = rankingMode === "scrape"
 
@@ -1092,6 +1107,12 @@ export async function exportOverlayVideo(
   reelData?: ReelData,
   rankingMode?: RankingMode,
 ): Promise<void> {
+  const mediaUrls = comments.map((c) => c.gifUrl).filter((u): u is string => !!u)
+  if (mediaUrls.length > 0) {
+    const granted = await ensureOptionalHostPermissions(mediaUrls)
+    if (!granted) console.warn("[exportReel] CDN host permission denied — GIFs will fall back")
+  }
+
   await document.fonts.ready
   const isListMode = rankingMode === "scrape"
 
